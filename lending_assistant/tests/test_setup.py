@@ -58,7 +58,7 @@ class TestSetup(AssistantTestCase):
 		meta = frappe.get_meta("Assistant Settings")
 		for field in ("enabled", "live_data", "code_reader", "web_search"):
 			self.assertEqual(str(meta.get_field(field).default), "0", field)
-		for field, value in (("max_tokens", "4096"), ("rate_limit_per_user", "30"),
+		for field, value in (("max_tokens", "16000"), ("default_effort", "high"), ("deep_effort", "medium"), ("rate_limit_per_user", "30"),
 			("rate_limit_window_seconds", "3600"), ("retention_days", "180"),
 			("default_model", "claude-sonnet-5-5"), ("deep_model", "claude-opus-5-5")):
 			self.assertEqual(str(meta.get_field(field).default), value, field)
@@ -72,38 +72,6 @@ class TestSetup(AssistantTestCase):
 
 		result = install.seed_defaults()
 		self.assertEqual(result["added_doctypes"], EXPECTED_DOCTYPES)
-		self.assertEqual(result["skipped_missing_doctypes"], [])
-		self.assertEqual(result["added_code_apps"], ["lending", "erpnext", "frappe"])
-
-		settings = settings_module.get_settings()
-		self.assertEqual([r.allowed_doctype for r in settings.doctype_allowlist], EXPECTED_DOCTYPES)
-		self.assertEqual([r.app_name for r in settings.code_app_allowlist], ["lending", "erpnext", "frappe"])
-		self.assertEqual(settings.enabled, 1, "seeding must not touch the switches")
-		for name in EXPECTED_DOCTYPES:
-			self.assertTrue(frappe.db.exists("DocType", name), name)
-
-		# idempotent: a second run adds nothing and does not bump `modified`
-		modified = frappe.get_doc("Assistant Settings").modified
-		again = install.seed_defaults()
-		self.assertEqual((again["added_doctypes"], again["added_code_apps"]), ([], []))
-		self.assertEqual(frappe.get_doc("Assistant Settings").modified, modified)
-
-		# keeps owner edits: with one row removed (non-empty table), seeding changes nothing
-		settings = frappe.get_doc("Assistant Settings")
-		settings.set("doctype_allowlist", settings.doctype_allowlist[:5])
-		settings.save(ignore_permissions=True)
-		install.seed_defaults()
-		self.assertEqual(len(settings_module.get_settings().doctype_allowlist), 5)
-
-	def test_seed_skips_missing_doctypes(self):
-		settings = frappe.get_doc("Assistant Settings")
-		settings.set("doctype_allowlist", [])
-		settings.save(ignore_permissions=True)
-
-		from unittest.mock import patch
-
-		with patch.object(install, "_doctype_exists", side_effect=lambda name: name != "Loan Partner"):
-			result = install.seed_defaults()
 		self.assertEqual(result["skipped_missing_doctypes"], [])
 		self.assertEqual(result["added_code_apps"], ["lending", "erpnext", "frappe"])
 

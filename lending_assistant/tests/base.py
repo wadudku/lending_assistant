@@ -8,7 +8,7 @@ back at the end of the class by IntegrationTestCase, so nothing here may call fr
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from lending_assistant.api import chat
+from lending_assistant.assistant import ratelimit
 
 PERSONAS = {
 	"senior": "ast-senior@example.com",
@@ -16,6 +16,7 @@ PERSONAS = {
 	"limited": "ast-limited@example.com",
 	"noaccess": "ast-noaccess@example.com",
 }
+TEST_IP = "10.9.9.9"
 SYSMGR = "ast-test-sysmgr@example.com"  # created per test class: System Manager + Assistant User
 
 SETTINGS_FIELDS = (
@@ -67,9 +68,13 @@ class AssistantTestCase(IntegrationTestCase):
 			frappe.set_user(user)
 
 	def clear_rate_limits(self):
-		for email in [*PERSONAS.values(), SYSMGR]:
-			for window in (3600, 60, 10):
-				frappe.cache.delete(chat._rate_key(email, window))
+		for window in (3600, 60, 10):
+			for email in [*PERSONAS.values(), SYSMGR]:
+				for prefix in (ratelimit.USER_PREFIX, ratelimit.FEEDBACK_PREFIX):
+					frappe.cache.delete(ratelimit.key_for(prefix, email, window))
+			# the IP layer counts every accepted call: tests run without a request, so the IP is "unknown"
+			for ip in ("unknown", TEST_IP):
+				frappe.cache.delete(ratelimit.key_for(ratelimit.IP_PREFIX, ip, window))
 
 	def as_user(self, who):
 		frappe.set_user(PERSONAS.get(who, who))

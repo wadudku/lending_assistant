@@ -79,6 +79,7 @@ class TestAsk(AssistantTestCase):
 			dict(question=""),
 			dict(question="   "),
 			dict(question=None),
+			dict(),  # no argument at all: a validation error, not a TypeError (M1-R2)
 			dict(question="x" * 4001),
 			dict(question="ok", depth="Fast"),
 			dict(question="ok", route="r" * 501),

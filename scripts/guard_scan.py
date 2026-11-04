@@ -17,17 +17,29 @@ HOW IT DECIDES (DECISIONS #43: an allowlist, not a denylist)
   (B) every attribute chain rooted at `frappe` must match an ALLOWLIST entry (`not-allowed` otherwise);
   (C) imports are allowlisted too (`import` otherwise);
   (D) a call to a method named like a DB read, write, commit, identity or side-effect API is a hit whatever the receiver;
-  (E) dunders and `__builtins__`; (F) `frappe.conf` / `get_site_config`; (G) writes to `frappe.flags`.
+  (E) dunders, `mro` and `__builtins__`; (F) `frappe.conf` / `get_site_config`; (G) writes to `frappe.flags`;
+  (H) the app's own modules (M2b-R11): another app module's names are judged against APP_API (the public surface) and
+  APP_GRANTS (per-file extras); a `_name`, an unlisted name, an unknown module or a module used as a value is a hit, and no
+  marker excuses it; (I) a doctype controller (`...doctype.<x>.<x>`) imported outside a `doctype/` folder (M2b-R12);
+  plus `type(x)` with one argument. `frappe.get_meta` returns a live Meta (a Document), so it is allowed only on marked
+  lines in guard.py, access.py and install.py.
+
+  R17: in guard.py a marker for user-switch, alias, txn-control, callbacks and flags is accepted only inside the named
+  functions (SCOPES), not anywhere in the file.
 
   The named rules below (db-read, write, qb, ...) are the old denylist. They stay because they give a hit a precise
   name and because their per-file marker table is how the existing marked lines are excused.
 
-KNOWN LIMITS (also in build/reports/M2b_r2_report.md): a syntactic scan can't follow values that are computed at run
-time (a name built from strings and fetched with a call the scan does not know), anything reached through a module
-the app does not own, or code that is not Python/JS under `lending_assistant/`. The run-time layers in
-`assistant/guard.py` (write trap, savepoint rollback, identity and connection check, callback snapshot) and the
-Reviewer's greps are separate layers. This scan is a net for careless or AI-written code, not a proof against a
-determined insider.
+THE BAR (DECISIONS #46): catch every direct or plausible misuse, meaning code a developer could write by mistake or for
+convenience (a framework API called directly, a private helper imported, a module aliased, a Document's class reached).
+Deliberate obfuscation, code whose only purpose is to evade a syntactic scan, is out of scope here. It is covered by the
+M4 line-by-line review of every tool module and by per-persona permission tests through each tool.
+
+KNOWN LIMITS: the table with the reason and the covering layer for each is in build/reports/M2b_r3_report.md. In short, a
+syntactic scan can't follow values computed at run time, a method on an object it cannot type, hook strings, or non-Python
+files; and it can't see "switch the user and switch back" inside one call. The run-time layers in `assistant/guard.py`
+(write trap, savepoint rollback, identity and connection check, callback and flag snapshots) and the Reviewer's greps are
+separate layers.
 """
 
 import argparse

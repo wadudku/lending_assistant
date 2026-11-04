@@ -188,16 +188,19 @@ EXEC_NAMES = {"eval", "exec", "compile", "__import__"}
 DYNAMIC_NAMES = {"getattr", "setattr", "delattr", "globals", "vars"}
 EXEC_DOTTED = {
 	"os.system", "os.popen", "frappe.call", "frappe.get_attr", "frappe.get_method", "operator.attrgetter",
-	"operator.methodcaller", "sys.modules",
+	"operator.methodcaller", "sys.modules", "sys._getframe", "sys._current_frames", "sys.exc_info",
 }  # fmt: skip
 DYNAMIC_DOTTED = {"operator.attrgetter", "operator.methodcaller", "sys.modules"}
-EXEC_PREFIXES = ("subprocess", "importlib", "runpy", "pkgutil", "ctypes", "builtins", "frappe.utils.safe_exec")
+EXEC_PREFIXES = (
+	"subprocess", "importlib", "runpy", "pkgutil", "ctypes", "builtins", "frappe.utils.safe_exec",
+	"gc", "inspect", "imp", "code", "codeop", "pdb",
+)  # fmt: skip
 SIDE_EFFECT_DOTTED = {
 	"frappe.sendmail", "frappe.enqueue", "frappe.enqueue_doc", "frappe.publish_realtime", "frappe.publish_progress",
 }  # fmt: skip
 SIDE_EFFECT_PREFIXES = ("frappe.utils.background_jobs", "frappe.email.queue")
 CLIENT_API_PREFIXES = ("frappe.client", "frappe.desk", "frappe.model.db_query")
-SECRET_PREFIXES = ("frappe.conf",)
+SECRET_PREFIXES = ("frappe.conf", "os.environ", "os.getenv", "os.putenv")
 SECRET_DOTTED = {"frappe.get_site_config"}
 # Names that must never be bound to a variable or passed on as a value: the alias would hide later calls.
 BARE_ALIAS = {"frappe.db", "frappe.qb", "frappe.local", "frappe.session"}
@@ -230,6 +233,8 @@ DUNDERS = {
 	"__builtins__", "__dict__", "__class__", "__globals__", "__subclasses__", "__mro__", "__getattribute__",
 	"__import__", "__getattr__", "__setattr__", "__delattr__", "__bases__", "__base__", "__code__", "__closure__",
 	"__func__", "__self__", "__reduce__", "__reduce_ex__",
+	# stack frames and tracebacks hand out another module's globals (`frame.f_globals['frappe']`)
+	"f_globals", "f_locals", "f_back", "f_builtins", "gi_frame", "cr_frame", "ag_frame", "tb_frame",
 }  # fmt: skip
 DUNDER_NAMES = {"__builtins__", "__import__"}
 

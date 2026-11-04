@@ -400,10 +400,7 @@ class TestGuardScan(AssistantTestCase):
 		}
 		for name, (code, ok_files) in restricted.items():
 			for rel in ok_files:
-				if name == "has_permission" or name == "whitelist":
-					self.assertClean({rel: code}, f"{name} in {rel}")
-				else:
-					self.assertClean({rel: code}, f"{name} in {rel}")
+				self.assertClean({rel: code}, f"{name} in {rel}")
 			self.assertFlagged(f"{name} in a tool", "not-allowed" if name != "whitelist" else "whitelist", code)
 
 	def test_C_imports_are_allowlisted(self):
@@ -468,7 +465,26 @@ class TestGuardScan(AssistantTestCase):
 		self.assertFlagged("importlib (kept)", "generic-exec", "import importlib\n")
 		self.assertFlagged("builtins (kept)", "generic-exec", "import builtins\n")
 
+	def test_E_frames_and_introspection_are_hits(self):
+		for name, code in (
+			("inspect", "import inspect\n"),
+			("gc", "import gc\n\ndef f():\n    return gc.get_objects()\n"),
+			("f_globals", "def f(fr):\n    return fr.f_globals['frappe']\n"),
+			("f_back", "def f(fr):\n    return fr.f_back\n"),
+			("tb_frame", "def f(tb):\n    return tb.tb_frame\n"),
+			("sys._getframe", "import sys\n\ndef f():\n    return sys._getframe(1)\n"),
+			("from inspect import currentframe", "from inspect import currentframe\n"),
+		):
+			with self.subTest(name):
+				self.assertFlagged(name, "dynamic" if name in ("f_globals", "f_back", "tb_frame") else "generic-exec", code)
+		self.assertFlagged("sys._getframe is dynamic access too", "generic-exec", "import sys\n\ndef f():\n    return sys._getframe(1)\n")
+
 	def test_F_secrets_are_hits_outside_install(self):
+		for code in (
+			"import os\n\ndef f():\n    return os.environ['AST_ANTHROPIC_API_KEY']\n",
+			"import os\n\ndef f():\n    return os.getenv('AST_ANTHROPIC_API_KEY')\n",
+		):
+			self.assertFlagged("environment read", "secrets", code)
 		for code in (
 			"import frappe\n\ndef f():\n    return frappe.conf.db_password\n",
 			"import frappe\n\ndef f():\n    return frappe.conf['db_password']\n",
@@ -478,7 +494,7 @@ class TestGuardScan(AssistantTestCase):
 		):
 			with self.subTest(code):
 				self.assertFlagged("secret", "secrets", code)
-				self.assertFlagged("secret marked in guard.py", "secrets", code.replace("\n", "  # AST-ALLOWED: please\n", 4) if False else code + "# AST-ALLOWED: please\n", "assistant/guard.py")
+				self.assertFlagged("secret marked in guard.py", "secrets", code + "# AST-ALLOWED: please\n", "assistant/guard.py")
 		marked = "import frappe\n\ndef f():\n    return frappe.conf.site_name  # AST-ALLOWED: install reads the site name\n"
 		self.assertClean({"install.py": marked}, "install.py")
 		self.assertFlagged("marked outside install.py", "secrets", marked, "assistant/guard.py")

@@ -96,3 +96,61 @@ class AssistantTestCase(IntegrationTestCase):
 	def count(self, doctype, **filters):
 		"""Row count as Administrator, for before/after comparisons (never assume an empty site)."""
 		return len(frappe.get_all(doctype, filters=filters, pluck="name", limit_page_length=0))
+
+
+class GuardTestCase(AssistantTestCase):
+	"""For the M2b guard tests: Live data and Code reader on, and the Settings tables put back afterwards.
+
+	Settings is cached in Redis and Redis is not rolled back, so any change to a table has to be undone by
+	saving again, not just by the class-level rollback.
+	"""
+
+	TABLES = ("doctype_allowlist", "code_app_allowlist", "never_send_fields")
+
+	def setUp(self):
+		super().setUp()
+		settings = frappe.get_doc("Assistant Settings")
+		self._tables = {t: [row.as_dict(no_nulls=True) for row in settings.get(t)] for t in self.TABLES}
+		self.configure(live_data=1, code_reader=1)
+		self._property_setters = []
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		for name, doctype in self._property_setters:
+			frappe.db.delete("Property Setter", {"name": name})
+			frappe.clear_cache(doctype=doctype)
+		settings = frappe.get_doc("Assistant Settings")
+		for table, rows in self._tables.items():
+			settings.set(table, [])
+			for row in rows:
+				settings.append(table, {k: v for k, v in row.items() if k not in ("name", "parent", "parentfield", "parenttype", "idx", "doctype", "creation", "modified", "modified_by", "owner", "docstatus")})
+		settings.save(ignore_permissions=True)
+		super().tearDown()
+
+	def add_never_send(self, doctype, fieldname):
+		settings = frappe.get_doc("Assistant Settings")
+		settings.append("never_send_fields", {"ref_doctype": doctype, "fieldname": fieldname})
+		settings.save(ignore_permissions=True)
+
+	def allow_doctype(self, doctype):
+		settings = frappe.get_doc("Assistant Settings")
+		settings.append("doctype_allowlist", {"allowed_doctype": doctype})
+		settings.save(ignore_permissions=True)
+
+	def set_permlevel(self, doctype, fieldname, level=1):
+		"""Temporary permlevel on one field (a Property Setter made here, removed in tearDown; DECISIONS #10)."""
+		frappe.make_property_setter(
+			{"doctype": doctype, "fieldname": fieldname, "property": "permlevel", "value": level, "property_type": "Int"},
+			validate_fields_for_doctype=False,
+		)
+		name = frappe.db.get_value("Property Setter", {"doc_type": doctype, "field_name": fieldname, "property": "permlevel"})
+		self._property_setters.append((name, doctype))
+		frappe.clear_cache(doctype=doctype)
+
+	def loan_names(self):
+		"""(visible-to-limited, hidden-from-limited) loan names, found as Administrator."""
+		visible = frappe.get_all("Loan", filters={"loan_product": "PL-EMI"}, pluck="name", limit=1)
+		hidden = frappe.get_all("Loan", filters={"loan_product": ["!=", "PL-EMI"]}, pluck="name", limit=1)
+		if not visible or not hidden:
+			raise AssertionError("The site needs a PL-EMI loan and a non-PL-EMI loan for the boundary tests.")
+		return visible[0], hidden[0]

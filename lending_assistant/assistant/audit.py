@@ -81,7 +81,7 @@ def log_exchange(
 	)
 	message.insert(ignore_permissions=True)  # AST-ALLOWED: app's own audit log
 
-	parent = frappe.get_doc(CONVERSATION, conversation)
+	parent = frappe.get_doc(CONVERSATION, conversation)  # AST-ALLOWED: own audit log; the caller has checked ownership
 	parent.message_count = (parent.message_count or 0) + 1
 	parent.last_activity = now_datetime()
 	parent.save(ignore_permissions=True)  # AST-ALLOWED: app's own audit log
@@ -90,7 +90,7 @@ def log_exchange(
 
 def set_feedback(message: str, value: str, comment: str | None = None) -> None:
 	"""Store thumbs up/down (and an optional comment) on a message. The caller checks ownership."""
-	doc = frappe.get_doc(MESSAGE, message)
+	doc = frappe.get_doc(MESSAGE, message)  # AST-ALLOWED: own audit log; the caller has checked ownership
 	doc.feedback = value
 	doc.feedback_comment = comment or ""
 	doc.save(ignore_permissions=True)  # AST-ALLOWED: app's own audit log

@@ -1,6 +1,6 @@
 // Lending Assistant chat widget (M1 stub).
-// Server text is only ever put on the page with textContent. Never use innerHTML / html() here:
-// markdown rendering and sanitising arrive in M5.
+// Server text is only ever put on the page with textContent: never as markup.
+// Markdown rendering and sanitising arrive in M5.
 frappe.provide("lending_assistant");
 
 (function () {

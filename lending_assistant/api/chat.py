@@ -143,7 +143,7 @@ def _own_record(doctype: str, name) -> str:
 			doctype,
 			filters={"name": name, "user": frappe.session.user},
 			pluck="name",
-			limit_page_length=1,
+			limit=1,
 		)
 	if not rows:
 		frappe.throw(_(NOT_FOUND), frappe.DoesNotExistError)

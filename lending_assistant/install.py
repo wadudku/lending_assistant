@@ -33,18 +33,22 @@ DEFAULT_DOCTYPES = [
 DEFAULT_CODE_APPS = ["lending", "erpnext", "frappe"]
 
 
+def _doctype_exists(name: str) -> bool:
+	return bool(frappe.db.exists("DocType", name))
+
+
 def after_install():
 	seed_defaults()
 
 
 def seed_defaults() -> dict:
 	"""Fill empty allowlists in Assistant Settings. Returns what it added and what it skipped."""
-	settings = frappe.get_doc("Assistant Settings")
+	settings = frappe.get_doc("Assistant Settings")  # AST-ALLOWED: install seed
 	result = {"added_doctypes": [], "skipped_missing_doctypes": [], "added_code_apps": []}
 
 	if not settings.doctype_allowlist:
 		for name in DEFAULT_DOCTYPES:
-			if frappe.db.exists("DocType", name):
+			if _doctype_exists(name):
 				settings.append("doctype_allowlist", {"allowed_doctype": name})
 				result["added_doctypes"].append(name)
 			else:

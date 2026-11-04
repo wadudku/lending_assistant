@@ -67,7 +67,7 @@ EXEC_DOTTED = {
 	"operator.methodcaller", "sys.modules",
 }  # fmt: skip
 DYNAMIC_DOTTED = {"operator.attrgetter", "operator.methodcaller", "sys.modules"}
-EXEC_PREFIXES = ("subprocess", "importlib", "frappe.utils.safe_exec")
+EXEC_PREFIXES = ("subprocess", "importlib", "runpy", "pkgutil", "ctypes", "builtins", "frappe.utils.safe_exec")
 SIDE_EFFECT_DOTTED = {
 	"frappe.sendmail", "frappe.enqueue", "frappe.enqueue_doc", "frappe.publish_realtime", "frappe.publish_progress",
 }  # fmt: skip

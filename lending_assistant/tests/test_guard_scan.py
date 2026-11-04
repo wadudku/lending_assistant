@@ -171,6 +171,9 @@ VARIANTS = [
 	("e19 eval", "generic-exec", "def f():\n    eval('1')\n"),
 	("e20 exec", "generic-exec", "def f():\n    exec('x = 1')\n"),
 	("e21 compile", "generic-exec", "def f():\n    compile('1', 'f', 'eval')\n"),
+	("e23 builtins.getattr", "generic-exec", "import builtins\n\ndef f(x):\n    return builtins.getattr(x, 'sql')\n"),
+	("e24 runpy", "generic-exec", "import runpy\n\ndef f():\n    runpy.run_path('x.py')\n"),
+	("e25 ctypes", "generic-exec", "import ctypes\n"),
 	("e22 safe_eval", "generic-exec", "import frappe\n\ndef f():\n    frappe.utils.safe_exec.safe_eval('1')\n"),
 	# (f) aliases of the four objects
 	("f1 d = frappe.db", "alias", "import frappe\n\nd = frappe.db\n"),

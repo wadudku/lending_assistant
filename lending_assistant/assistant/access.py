@@ -6,7 +6,6 @@ widget are hints at most: they never decide who the user is or what they may do 
 """
 
 import frappe
-import frappe.permissions  # not loaded by `bench execute` or a worker until something imports it (M2b-R4)
 
 from lending_assistant.assistant import guard
 
@@ -25,11 +24,7 @@ def check_my_access(doctype, actions, docname=None) -> dict:
 	if not isinstance(actions, list | tuple) or not actions or any(a not in ACTIONS for a in actions):
 		raise frappe.ValidationError(f"Actions must be some of: {', '.join(ACTIONS)}.")
 
-	doc = guard.load_readable(doctype, docname) if docname is not None else None
-	access = {
-		action: bool(frappe.permissions.has_permission(doctype, action, doc=doc, print_logs=False))
-		for action in dict.fromkeys(actions)
-	}
+	access = guard.check_actions(doctype, actions, docname)
 	result = {"source": guard.SOURCE_LIVE, "doctype": doctype, "access": access}
 	if docname is not None:
 		result["docname"] = docname
@@ -46,7 +41,7 @@ def roles_that_can(doctype, action) -> dict:
 		raise frappe.ValidationError(f"Action must be one of: {', '.join(ACTIONS)}.")
 
 	roles, owner_only = set(), set()
-	for perm in frappe.get_meta(doctype).permissions:
+	for perm in frappe.get_meta(doctype).permissions:  # AST-ALLOWED: permission rows from the meta; only role names leave this module
 		if (perm.permlevel or 0) == 0 and perm.get(action):
 			(owner_only if perm.get("if_owner") else roles).add(perm.role)
 	return {

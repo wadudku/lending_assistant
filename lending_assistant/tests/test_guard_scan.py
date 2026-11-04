@@ -205,7 +205,6 @@ CLEAN_FORMS = {
 
 		def f(doc, values):
 		    user = frappe.session.user
-		    frappe.get_meta("Loan")
 		    frappe.get_roles()
 		    doc.update(values)
 		    values.update({"a": 1})
@@ -222,17 +221,16 @@ CLEAN_FORMS = {
 	""",
 	"assistant/access.py": """
 		import frappe
-		import frappe.permissions
 
 		def f():
-		    return frappe.permissions.has_permission("Loan", "read")
+		    return frappe.get_meta("Loan").permissions  # AST-ALLOWED: permission rows from the meta
 	""",
 	"assistant/guard.py": """
 		import frappe
 		import frappe.permissions
 		from frappe.model import get_permitted_fields
 
-		def f(doc):
+		def _set_ast_flag(doc):
 		    stack = frappe.flags.get("ast_guard_stack")  # AST-ALLOWED: flags helper
 		    frappe.flags["ast_read_only"] = True  # AST-ALLOWED: flags helper
 		    size = len(frappe.local.message_log)  # AST-ALLOWED: message log snapshot
@@ -392,7 +390,7 @@ class TestGuardScan(AssistantTestCase):
 
 	def test_B_each_file_restricted_entry_works_only_in_its_files(self):
 		restricted = {
-			"has_permission": ("import frappe\nimport frappe.permissions\n\ndef f():\n    return frappe.permissions.has_permission('Loan', 'read')\n", ("assistant/guard.py", "assistant/access.py")),
+			"has_permission": ("import frappe\nimport frappe.permissions\n\ndef f():\n    return frappe.permissions.has_permission('Loan', 'read')\n", ("assistant/guard.py",)),
 			"cache": ("import frappe\n\ndef f():\n    return frappe.cache.make_key('k')\n", ("assistant/ratelimit.py",)),
 			"request_ip": ("import frappe\n\ndef f():\n    return frappe.local.request_ip\n", ("api/chat.py",)),
 			"bench_path": ("import frappe\n\ndef f():\n    return frappe.utils.get_bench_path()\n", ("assistant/codereader.py",)),
@@ -550,8 +548,8 @@ class TestGuardScan(AssistantTestCase):
 	def test_a_marker_only_works_in_the_file_that_may_use_that_rule(self):
 		"""The new rules keep the per-file allowlist: alias and callbacks in guard.py only, the rest nowhere."""
 		marked = {
-			"alias": "import frappe\n\nd = frappe.db  # AST-ALLOWED: test\n",
-			"callbacks": "import frappe\n\nm = frappe.db.after_commit  # AST-ALLOWED: test\n",
+			"alias": "import frappe\n\ndef _capture_identity():\n    d = frappe.db  # AST-ALLOWED: test\n",
+			"callbacks": "import frappe\n\ndef _snapshot_callbacks():\n    m = frappe.db.after_commit  # AST-ALLOWED: test\n",
 		}
 		for rule, code in marked.items():
 			ok = run("--root", self.make_tree({"assistant/guard.py": code}))

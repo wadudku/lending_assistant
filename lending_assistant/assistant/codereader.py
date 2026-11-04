@@ -140,7 +140,7 @@ def read(path, start_line=1, end_line=None) -> str:
 		"more_lines_exist": more,
 		"lines": [f"{n}: {t}" for n, t in lines],
 	}
-	guard._fit(result, row_lists=lambda: [result["lines"]], field_dicts=lambda: [], source="code")
+	guard.fit(result, row_lists=lambda: [result["lines"]], field_dicts=lambda: [], source="code")
 	if result["lines"]:
 		result["end_line"] = start_line + len(result["lines"]) - 1
 	return guard.as_data(result, source="code")
@@ -214,6 +214,6 @@ def search(query, app=None, path_glob=None) -> str:
 		"files_scanned": files_scanned,
 		"matches": matches,
 	}
-	guard._fit(result, row_lists=lambda: [result["matches"]], field_dicts=lambda: [], source="code")
+	guard.fit(result, row_lists=lambda: [result["matches"]], field_dicts=lambda: [], source="code")
 	result["count_returned"] = len(result["matches"])
 	return guard.as_data(result, source="code")

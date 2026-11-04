@@ -62,7 +62,7 @@ def _doctype_exists(name: str) -> bool:
 
 
 def _field_exists(doctype: str, fieldname: str) -> bool:
-	return _doctype_exists(doctype) and frappe.get_meta(doctype).has_field(fieldname)
+	return _doctype_exists(doctype) and frappe.get_meta(doctype).has_field(fieldname)  # AST-ALLOWED: install seed, meta check (has_field returns a bool)
 
 
 def after_install():

@@ -69,6 +69,22 @@ ALLOWED = {
 	"js-html": (),
 	"not-allowed": (),  # (B) a frappe chain that is on no allowlist entry
 	"import": (),  # (C) an import that is on no allowlist entry
+	"app-api": (),  # (H) one app module reaching another module's private or unlisted names (M2b-R11)
+	"controller-import": (),  # (I) a doctype controller class imported outside doctype/ (M2b-R12)
+}
+
+# --- (R17) where in guard.py a marker for these rules is accepted -------------------------------------------------------
+# A marker excuses a hit only inside one of the named functions (any enclosing function counts, so a nested helper is
+# fine). The trusted, marked surface is therefore a handful of functions, not a whole file (DECISIONS #45).
+IDENTITY_FUNCS = ("_capture_identity", "_restore_identity", "_discard_connection")
+SCOPES = {
+	GUARD: {
+		"user-switch": IDENTITY_FUNCS,
+		"alias": IDENTITY_FUNCS,
+		"txn-control": (*IDENTITY_FUNCS, "read_only_tool_context"),
+		"callbacks": ("_snapshot_callbacks", "_restore_callbacks"),
+		"flags": ("_ast_flag", "_set_ast_flag", "_capture_identity", "_restore_identity", "_restore_flag_values"),
+	}
 }
 
 # --- (B) the chain allowlist -------------------------------------------------------------------------------------------
@@ -88,19 +104,19 @@ ALLOWLIST = [
 	("frappe.DoesNotExistError", ANYWHERE, "use", False),
 	("frappe.RateLimitExceededError", ANYWHERE, "use", False),
 	("frappe.session.user", ANYWHERE, "read", False),
-	("frappe.get_meta", ANYWHERE, "call", False),
 	("frappe.get_roles", ANYWHERE, "call", False),
 	("frappe.utils.now_datetime", ANYWHERE, "call", False),
 	("frappe.utils.strip_html_tags", ANYWHERE, "call", False),
 	# one file or folder, unmarked
 	("frappe.utils.get_bench_path", ("assistant/codereader.py",), "call", False),
-	("frappe.permissions.has_permission", (GUARD, "assistant/access.py"), "call", False),
+	("frappe.permissions.has_permission", (GUARD,), "call", False),
 	("frappe.model.get_permitted_fields", (GUARD,), "call", False),
 	("frappe.model.document.Document", ("**/doctype/",), "base", False),
 	("frappe.whitelist", ("api/",), "call", False),
 	("frappe.cache.*", ("assistant/ratelimit.py",), "call", False),
 	("frappe.local.request_ip", ("api/chat.py",), "read", False),
-	# guard.py, marked lines only
+	# marked lines only. get_meta returns a live Meta (a Document): tool code gets meta facts from guard/access helpers
+	("frappe.get_meta", (GUARD, "assistant/access.py", "install.py"), "call", True),
 	("frappe.flags.*", (GUARD,), "any", True),
 	("frappe.local.message_log", (GUARD,), "any", True),
 	("frappe.log_error", (GUARD,), "call", True),
@@ -116,13 +132,73 @@ ALLOWLIST = [
 # (kind, module, name, files). "import" entries are `import module`; "from" entries are `from module import name`.
 IMPORT_ALLOWLIST = [
 	("import", "frappe", None, ANYWHERE),
-	("import", "frappe.permissions", None, (GUARD, "assistant/access.py")),
+	("import", "frappe.permissions", None, (GUARD,)),
 	("from", "frappe", "_", ANYWHERE),
 	("from", "frappe.utils", "now_datetime", ANYWHERE),
 	("from", "frappe.utils", "strip_html_tags", ANYWHERE),
 	("from", "frappe.model", "get_permitted_fields", (GUARD,)),
 	("from", "frappe.model.document", "Document", ("**/doctype/",)),
 ]
+
+
+# --- (H) the app's own modules ---------------------------------------------------------------------------------------
+# What any app module may import or call from another app module (M2b-R11). Everything else, and every `_name`, is a
+# hit. The first block is the surface tools get; it returns plain data only (tests/test_guard_surface.py).
+ASSISTANT = PACKAGE + ".assistant"
+APP_API = {
+	f"{ASSISTANT}.guard": {
+		"read_doc", "list_records", "as_data", "read_only_tool_context", "RecordNotAvailable", "AssistantGuardError",
+	},
+	f"{ASSISTANT}.access": {"check_my_access", "roles_that_can"},
+	f"{ASSISTANT}.codereader": {"read", "search"},
+	f"{ASSISTANT}.settings": {"get_settings"},
+	f"{ASSISTANT}.audit": set(),
+	f"{ASSISTANT}.ratelimit": set(),
+	f"{PACKAGE}.install": set(),
+}  # fmt: skip
+# (module, name, files, reserved): extra names for particular files. `reserved` grants are for code that does not exist
+# yet (M4); they are exempt from the dead-entry check and a test shows they work only in their file.
+APP_GRANTS = [
+	(f"{ASSISTANT}.guard", "require_doctype", ("assistant/access.py",), False),
+	(f"{ASSISTANT}.guard", "check_actions", ("assistant/access.py",), False),
+	(f"{ASSISTANT}.guard", "SOURCE_LIVE", ("assistant/access.py",), False),
+	(f"{ASSISTANT}.guard", "fit", ("assistant/codereader.py",), False),
+	(f"{ASSISTANT}.guard", "AssistantRefused", ("assistant/codereader.py",), False),
+	(f"{ASSISTANT}.settings", "get_api_key", ("assistant/orchestrator.py",), True),
+	(f"{ASSISTANT}.audit", "CONVERSATION", ("api/chat.py",), False),
+	(f"{ASSISTANT}.audit", "MESSAGE", ("api/chat.py",), False),
+	(f"{ASSISTANT}.audit", "start_conversation", ("api/chat.py",), False),
+	(f"{ASSISTANT}.audit", "log_exchange", ("api/chat.py",), False),
+	(f"{ASSISTANT}.audit", "set_feedback", ("api/chat.py",), False),
+	(f"{ASSISTANT}.ratelimit", "exceeded", ("api/chat.py",), False),
+	(f"{ASSISTANT}.ratelimit", "USER_PREFIX", ("api/chat.py",), False),
+	(f"{ASSISTANT}.ratelimit", "IP_PREFIX", ("api/chat.py",), False),
+	(f"{ASSISTANT}.ratelimit", "FEEDBACK_PREFIX", ("api/chat.py",), False),
+	(f"{PACKAGE}.install", "seed_defaults", ("patches/",), False),
+	(f"{PACKAGE}.install", "raise_max_tokens_default", ("patches/",), False),
+]  # fmt: skip
+# A doctype controller: `...doctype.<x>.<x>` (a class that loads rows without any permission check).
+CONTROLLER = re.compile(r"(?:^|\.)doctype\.(\w+)\.\1(?:\.|$)")
+
+
+def grant_key(grant) -> str:
+	module, name, files, _reserved = grant
+	return f"{module}.{name} in {', '.join(files)}"
+
+
+def is_app(name: str) -> bool:
+	return name == PACKAGE or name.startswith(PACKAGE + ".")
+
+
+def app_target(full: str):
+	"""(module, rest) for the longest APP_API module that `full` starts with, else (None, [])."""
+	best = None
+	for module in APP_API:
+		if (full == module or full.startswith(module + ".")) and (best is None or len(module) > len(best)):
+			best = module
+	if best is None:
+		return None, []
+	return best, [part for part in full[len(best) :].split(".") if part]
 
 
 class Entry(NamedTuple):
@@ -179,7 +255,7 @@ WRITES = {
 # The ONLY frappe.db attributes tool code may touch, and only on lines the guard marks (DECISIONS #35, #41, #43).
 DB_TXN_ALLOWED = {
 	"savepoint", "rollback", "release_savepoint", "_disable_transaction_control", "transaction_writes", "_conn",
-	"_cursor",
+	"_cursor", "close",
 }  # fmt: skip
 DB_CALLBACKS = {"before_commit", "after_commit", "before_rollback", "after_rollback"}
 TXN_ATTRS = {"_disable_transaction_control", "transaction_writes", "_conn", "_cursor"}
@@ -232,7 +308,7 @@ QB_WORDS = {"qb", "query", "query_builder", "Engine", "get_query", "from_"}
 DUNDERS = {
 	"__builtins__", "__dict__", "__class__", "__globals__", "__subclasses__", "__mro__", "__getattribute__",
 	"__import__", "__getattr__", "__setattr__", "__delattr__", "__bases__", "__base__", "__code__", "__closure__",
-	"__func__", "__self__", "__reduce__", "__reduce_ex__",
+	"__func__", "__self__", "__reduce__", "__reduce_ex__", "mro",  # `type(x).mro()[1]` reaches the Document class (R12)
 	# stack frames and tracebacks hand out another module's globals (`frame.f_globals['frappe']`)
 	"f_globals", "f_locals", "f_back", "f_builtins", "gi_frame", "cr_frame", "ag_frame", "tb_frame",
 }  # fmt: skip
@@ -398,22 +474,28 @@ class Scanner(ast.NodeVisitor):
 				self.hit(node, "import", f"import {name} is not on the import allowlist (C)")
 		elif any(under(name, p) for p in EXEC_PREFIXES):
 			self.hit(node, "generic-exec", f"import of {name}")
+		elif is_app(name):
+			self.judge_app_import(node, name)
+		self.judge_controller(node, name)
 
 	def judge_from_import(self, node):
-		module = node.module or ""
+		module = self.absolute_module(node)
 		for item in node.names:
 			bound = item.asname or item.name
 			if bound == "frappe":
 				self.hit(node, "alias", "a name `frappe` bound by an import")
-		if node.level:  # relative import: inside the app, nothing else to judge
-			return
+		is_app_module = is_app(module)
 		is_frappe = module == "frappe" or module.startswith("frappe.")
 		for item in node.names:
 			if item.name == "*":
-				self.hit(node, "alias" if is_frappe else "import", f"star import from {module}")
+				self.hit(node, "app-api" if is_app_module else "alias" if is_frappe else "import", f"star import from {module}")
 				continue
 			full = f"{module}.{item.name}"
 			self.aliases[item.asname or item.name] = full
+			self.judge_controller(node, full)
+			if is_app_module:
+				self.judge_app_import(node, full)
+				continue
 			if is_frappe:
 				found = classify(full, False)
 				if found:
@@ -424,6 +506,61 @@ class Scanner(ast.NodeVisitor):
 					self.hit(node, "import", f"from {module} import {item.name} is not on the import allowlist (C)")
 			elif any(under(full, p) for p in EXEC_PREFIXES) or full in EXEC_DOTTED or full in DYNAMIC_DOTTED:
 				self.hit(node, "generic-exec" if full not in DYNAMIC_DOTTED else "dynamic", f"import of {full}")
+
+	def absolute_module(self, node) -> str:
+		"""The dotted module of a `from` import, with a relative import resolved against this file."""
+		if not node.level:
+			return node.module or ""
+		package = [PACKAGE, *self.rel.split("/")[:-1]]
+		base = package[: len(package) - (node.level - 1)]
+		return ".".join([*base, *([node.module] if node.module else [])])
+
+	def own_module(self) -> str:
+		parts = self.rel[:-3].split("/") if self.rel.endswith(".py") else self.rel.split("/")
+		if parts[-1] == "__init__":
+			parts = parts[:-1]
+		return ".".join([PACKAGE, *parts])
+
+	# --- (H) the app's own modules, (I) controller classes
+
+	def judge_controller(self, node, full: str):
+		if CONTROLLER.search(full) and not file_ok(self.rel, ("**/doctype/",)):
+			self.hit(node, "controller-import", f"{full}: a doctype controller loads rows with no permission check (I)")
+
+	def judge_app_import(self, node, full: str):
+		"""`import a.b` / `from a import b`: a module may be imported; an unknown module, or a private or unlisted
+		name, is a hit on the import line too (uses are judged where they happen)."""
+		if full in APP_API or full == self.own_module():
+			return
+		module, rest = app_target(full)
+		if module is None:
+			self.hit(node, "app-api", f"{full} is not an app module on the API table (H)")
+		elif module != self.own_module():
+			self.app_name_check(node, module, rest)
+
+	def app_name_check(self, node, module: str, rest: list):
+		name = rest[0]
+		if any(part.startswith("_") for part in rest):
+			self.hit(node, "app-api", f"{module}.{'.'.join(rest)}: a private name of another app module (H)")
+			return
+		if name in APP_API[module]:
+			return
+		for grant in APP_GRANTS:
+			if grant[0] == module and grant[1] == name and file_ok(self.rel, grant[2]):
+				self.used_entries.add(grant_key(grant))
+				return
+		self.hit(node, "app-api", f"{module}.{name} is not a public name of {module.rsplit('.', 1)[1]} for {self.rel} (H)")
+
+	def judge_app(self, node, full: str, use: str):
+		module, rest = app_target(full)
+		if module is None:
+			self.hit(node, "app-api", f"{full} is not an app module on the API table (H)")
+		elif module == self.own_module():
+			return
+		elif not rest:
+			self.hit(node, "app-api", f"{module} used as a value: it may only be the root of an attribute chain (H)")
+		else:
+			self.app_name_check(node, module, rest)
 
 	# --- (B) the allowlist
 
@@ -438,6 +575,8 @@ class Scanner(ast.NodeVisitor):
 			self.hit_found(node, found, call)
 		elif full.split(".")[0] == "frappe":
 			self.judge_allowlist(node, full, use)
+		elif is_app(full):
+			self.judge_app(node, full, use)
 		if full.split(".")[0] == "frappe" and under(full, "frappe.flags"):
 			self.judge_flags(node, use)
 
@@ -630,6 +769,8 @@ class Scanner(ast.NodeVisitor):
 				self.hit(node, "dynamic", f"{func.id}(): dynamic attribute access hides what is being touched")
 			elif func.id == "open":
 				self.hit(node, "file-access", "open()")
+			elif func.id == "type" and len(node.args) == 1 and not node.keywords:
+				self.hit(node, "dynamic", "type(x): hands out the class of any object, Document included (R12)")
 		self.generic_visit(node)
 
 	def judge_method(self, node, func):
@@ -659,7 +800,15 @@ def allowed_here(rel: str, rule: str, files=None) -> bool:
 	return file_ok(rel, ALLOWED.get(rule, ()) if files is None else files)
 
 
-def check_markers(rel: str, lines: list[str], hits, used_lines: set[int]):
+def in_scope(rel: str, rule: str, line: int, functions) -> bool:
+	"""R17: for the scoped rules a marker is accepted only inside the named functions of that file."""
+	names = SCOPES.get(rel, {}).get(rule)
+	if names is None:
+		return True
+	return any(name in names and start <= line <= end for name, start, end in functions)
+
+
+def check_markers(rel: str, lines: list[str], hits, used_lines: set[int], functions=()):
 	problems = []
 	seen = set()
 	for hit in sorted(set(hits), key=lambda h: (h.line, h.rule, h.message)):
@@ -674,6 +823,9 @@ def check_markers(rel: str, lines: list[str], hits, used_lines: set[int]):
 			problems.append((hit.line, hit.rule, f"{hit.message}: AST-ALLOWED needs a reason"))
 		elif not allowed_here(rel, hit.rule, hit.files):
 			problems.append((hit.line, hit.rule, f"{hit.message}: AST-ALLOWED is not permitted in {rel} for '{hit.rule}'"))
+		elif not in_scope(rel, hit.rule, hit.line, functions):
+			where = ", ".join(SCOPES[rel][hit.rule])
+			problems.append((hit.line, hit.rule, f"{hit.message}: AST-ALLOWED for '{hit.rule}' is accepted only inside {where} (R17)"))
 		else:
 			used_lines.add(hit.line)
 	return problems
@@ -703,7 +855,12 @@ def scan_python(rel: str, source: str, used: set[str], strict: bool = False):
 	scanner.visit(tree)
 	used |= scanner.used_entries
 	used_lines: set[int] = set()
-	problems = check_markers(rel, lines, scanner.hits, used_lines)
+	functions = [
+		(n.name, n.lineno, n.end_lineno or n.lineno)
+		for n in ast.walk(tree)
+		if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+	]
+	problems = check_markers(rel, lines, scanner.hits, used_lines, functions)
 	extra = check_marker_lines(lines, used_lines, strict)
 	return problems + [p for p in extra if not any(q[0] == p[0] and "needs a reason" in q[2] for q in problems)]
 
@@ -724,7 +881,11 @@ class Result(NamedTuple):
 
 
 def all_entry_keys() -> list[str]:
-	return [e.key for e in ENTRIES] + [import_key(e) for e in IMPORT_ALLOWLIST]
+	return (
+		[e.key for e in ENTRIES]
+		+ [import_key(e) for e in IMPORT_ALLOWLIST]
+		+ [grant_key(g) for g in APP_GRANTS if not g[3]]
+	)
 
 
 def scan(root: Path, strict: bool = False) -> Result:

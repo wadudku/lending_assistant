@@ -3,6 +3,9 @@
 Assistant Settings is app config, not business data. Assistant Users must not be able to read it
 (it holds the API key), so there is no permission check here: every other module goes through
 these two functions and never touches the doctype itself.
+
+`get_settings()` hands out a plain copy, never the Settings Document (M2b-R12): a Document gives its caller
+`type(doc)` and so the Document class, and `api_key` is not in the copy at all.
 """
 
 import frappe
@@ -10,9 +13,18 @@ import frappe
 SETTINGS_DOCTYPE = "Assistant Settings"
 
 
-def get_settings():
-	"""Cached read of the Assistant Settings single."""
+def _cached():
 	return frappe.get_cached_doc(SETTINGS_DOCTYPE)  # AST-ALLOWED: app config, the one settings reader (DECISIONS #17)
+
+
+def get_settings():
+	"""A fresh read-only-by-copy `frappe._dict` of the settings (child rows are `_dict`s too). No Password field."""
+	doc = _cached()
+	passwords = {df.fieldname for df in doc.meta.fields if df.fieldtype == "Password"}
+	data = doc.as_dict()
+	for fieldname in passwords:
+		data.pop(fieldname, None)
+	return data
 
 
 def get_api_key() -> str | None:
@@ -20,4 +32,4 @@ def get_api_key() -> str | None:
 
 	Not called anywhere in M1.
 	"""
-	return get_settings().get_password("api_key", raise_exception=False)  # AST-ALLOWED: the one reader of the API key (G8), server-side only
+	return _cached().get_password("api_key", raise_exception=False)  # AST-ALLOWED: the one reader of the API key (G8), server-side only

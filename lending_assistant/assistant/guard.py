@@ -17,6 +17,7 @@ Identity is `frappe.session.user` and nothing else. No function here accepts a u
 import json
 import re
 import uuid
+from collections import Counter
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -74,58 +75,167 @@ class ReadOnlyContext:
 		self.db_writes = 0  # write statements the tool made (counted before the rollback)
 		self.trap_hits = 0  # writes the doc_events trap refused
 		self.callbacks_dropped = 0  # commit / rollback callbacks registered inside the context and removed
-		self.callback_managers: list = []
-		self.callback_marks: list[int] = []  # their lengths on entry
+		self.callbacks_restored = 0  # earlier callbacks the tool consumed inside the context and we put back
+		self.identity_changes: list[str] = []  # what changed under the tool: user, session, connection, site, flags
+		self.callback_snapshots: list = []
 		self.nested: list["ReadOnlyContext"] = []
 
 	@property
 	def violation(self) -> bool:
 		return bool(
-			self.db_writes or self.trap_hits or self.callbacks_dropped or any(c.violation for c in self.nested)
+			self.db_writes
+			or self.trap_hits
+			or self.callbacks_dropped
+			or self.callbacks_restored
+			or self.identity_changes
+			or any(c.violation for c in self.nested)
 		)
 
 	def summary(self) -> dict:
+		kids = [c.summary() for c in self.nested]
 		return {
 			"tool": self.tool,
-			"db_writes": self.db_writes + sum(c.summary()["db_writes"] for c in self.nested),
-			"trap_hits": self.trap_hits + sum(c.summary()["trap_hits"] for c in self.nested),
-			"callbacks_dropped": self.callbacks_dropped + sum(c.summary()["callbacks_dropped"] for c in self.nested),
+			"db_writes": self.db_writes + sum(k["db_writes"] for k in kids),
+			"trap_hits": self.trap_hits + sum(k["trap_hits"] for k in kids),
+			"callbacks_dropped": self.callbacks_dropped + sum(k["callbacks_dropped"] for k in kids),
+			"callbacks_restored": self.callbacks_restored + sum(k["callbacks_restored"] for k in kids),
+			"identity_changes": len(self.identity_changes) + sum(k["identity_changes"] for k in kids),
 		}
+
+
+# The only two reads / writes of `frappe.flags` in this app (scanner rule G). `ignore_permissions` is read and
+# restored only by the run-time identity check.
+_GUARDED_FLAGS = ("ignore_permissions",)
+
+
+def _ast_flag(name: str):
+	if not (name.startswith("ast_") or name in _GUARDED_FLAGS):
+		raise AssistantGuardError("The guard reads only its own ast_* flags.")
+	return frappe.flags.get(name)  # AST-ALLOWED: the one place guard.py reads frappe.flags
+
+
+def _set_ast_flag(name: str, value):
+	if not (name.startswith("ast_") or name in _GUARDED_FLAGS):
+		raise AssistantGuardError("The guard writes only its own ast_* flags.")
+	frappe.flags[name] = value  # AST-ALLOWED: the one place guard.py writes frappe.flags
 
 
 def block_if_read_only(doc=None, method=None, *args, **kwargs):
 	"""`doc_events["*"]` hook (G1 layer 2). Does nothing unless a tool context is open."""
-	if frappe.flags.ast_read_only:
-		frappe.flags.ast_trap_hits = (frappe.flags.ast_trap_hits or 0) + 1
+	if _ast_flag("ast_read_only"):
+		_set_ast_flag("ast_trap_hits", (_ast_flag("ast_trap_hits") or 0) + 1)
 		raise frappe.PermissionError(READ_ONLY_MESSAGE)
+
+
+def _capture_identity() -> dict:
+	"""Who and what the context starts with. Compared on exit (M2b-R8: the run-time layer behind the scanner)."""
+	db, session, flags, site = frappe.local.db, frappe.local.session, frappe.local.flags, frappe.local.site  # AST-ALLOWED: run-time identity layer reads the live objects
+	user, sid = frappe.session.user, frappe.session.sid  # AST-ALLOWED: run-time identity layer
+	conn, cursor = db._conn, db._cursor  # AST-ALLOWED: run-time identity layer: the connection object itself
+	return {
+		"db": db, "session": session, "flags": flags, "site": site, "user": user, "sid": sid, "conn": conn,
+		"cursor": cursor, "ignore_permissions": _ast_flag("ignore_permissions"),
+	}  # fmt: skip
+
+
+def _discard_connection() -> None:
+	"""Roll back the connection the tool swapped in (call before the original is put back). Raw driver call, so
+	the swapped-in connection's own callbacks do not run."""
+	try:
+		frappe.local.db._conn.rollback()  # AST-ALLOWED: run-time identity layer: undo what the swapped-in connection did not commit
+	except Exception:
+		pass
+
+
+def _restore_identity(snap: dict) -> list[str]:
+	"""Compare with the entry snapshot and put back what was changed. Returns what had changed.
+
+	A write that the tool COMMITTED on a new connection cannot be undone from here; the scanner (connect, init,
+	login_as, set_user are never excused) is what prevents it. This makes sure the swap never outlives the call.
+	"""
+	changed = []
+	if frappe.local.db is not snap["db"]:  # AST-ALLOWED: run-time identity layer
+		changed.append("database connection")
+		_discard_connection()
+		frappe.local.db = snap["db"]  # AST-ALLOWED: run-time identity layer: put the original connection back
+	if frappe.local.db._conn is not snap["conn"]:  # AST-ALLOWED: run-time identity layer
+		changed.append("database connection (same object, new socket)")
+		frappe.local.db._conn, frappe.local.db._cursor = snap["conn"], snap["cursor"]  # AST-ALLOWED: run-time identity layer
+	if frappe.local.flags is not snap["flags"]:  # AST-ALLOWED: run-time identity layer
+		changed.append("flags")
+		frappe.local.flags = snap["flags"]  # AST-ALLOWED: run-time identity layer
+	if frappe.local.site != snap["site"]:  # AST-ALLOWED: run-time identity layer
+		changed.append("site")
+		frappe.local.site = snap["site"]  # AST-ALLOWED: run-time identity layer
+	who_changed = frappe.local.session is not snap["session"]  # AST-ALLOWED: run-time identity layer
+	if who_changed:
+		frappe.local.session = snap["session"]  # AST-ALLOWED: run-time identity layer
+	if frappe.session.user != snap["user"] or frappe.session.sid != snap["sid"]:  # AST-ALLOWED: run-time identity layer
+		who_changed = True
+		frappe.session.user = snap["user"]  # AST-ALLOWED: run-time identity layer: not set_user
+		frappe.session.sid = snap["sid"]  # AST-ALLOWED: run-time identity layer
+	if who_changed:
+		changed.append("session user")
+		# what set_user() resets: permission caches built for the other user must not stay behind
+		frappe.local.user_perms, frappe.local.role_permissions, frappe.local.cache = None, {}, {}  # AST-ALLOWED: run-time identity layer
+	if _ast_flag("ignore_permissions") != snap["ignore_permissions"]:
+		changed.append("ignore_permissions flag")
+		_set_ast_flag("ignore_permissions", snap["ignore_permissions"])
+	return changed
+
+
+def _snapshot_callbacks() -> list:
+	"""(manager, its queue object, the queue's contents) for the four commit / rollback callback managers (M2b-R9)."""
+	managers = [frappe.db.before_commit, frappe.db.after_commit, frappe.db.before_rollback, frappe.db.after_rollback]  # AST-ALLOWED: G1 callback layer
+	return [(manager, manager._functions, list(manager._functions)) for manager in managers]  # AST-ALLOWED: G1 callback layer
+
+
+def _restore_callbacks(ctx: ReadOnlyContext) -> None:
+	"""Put every queue back to exactly its contents on entry (M2b-R3, R9).
+
+	The savepoint rollback only undoes SQL. A callback queued here would run at the next real commit, after the
+	guard is gone (that includes `frappe.enqueue(..., enqueue_after_commit=True)` and deferred realtime events).
+	Compared by identity of the function, so a context that consumed earlier callbacks and then added as many
+	new ones does not hide the swap. A replaced queue object is replaced back.
+	"""
+	for manager, queue, before in ctx.callback_snapshots:
+		now = Counter(id(fn) for fn in list(manager._functions))  # AST-ALLOWED: G1 callback layer
+		kept = Counter(id(fn) for fn in before)
+		ctx.callbacks_dropped += sum((now - kept).values())  # added inside: never run
+		ctx.callbacks_restored += sum((kept - now).values())  # earlier ones the tool consumed: put back
+		manager._functions = queue  # AST-ALLOWED: G1 callback layer: the original queue object, even if it was replaced
+		queue.clear()
+		queue.extend(before)
 
 
 @contextmanager
 def read_only_tool_context(tool: str = ""):
-	"""Run a tool so that nothing it does can reach the database (G1 layers 2-5).
+	"""Run a tool so that nothing it does can reach the database (G1 layers 2-5, plus the identity check).
 
-	On exit, always (success, exception, nested): roll back to the savepoint, record a violation if write
-	statements were counted, and put the flag and the transaction-control counter back exactly as found.
-	If the savepoint is gone (a raw COMMIT or DDL ran) it raises AssistantGuardError.
+	On exit, always (success, exception, nested): put back the identity and connection the tool started with,
+	restore the callback queues, roll back to the savepoint, record a violation if anything was counted, and put
+	the flag and the transaction-control counter back exactly as found. If the savepoint is gone (a raw COMMIT or
+	DDL ran) or the identity or connection changed, it raises AssistantGuardError.
 	"""
 	db = frappe.db  # AST-ALLOWED: G1 layers 3-5 need the connection object for the whole block
 	ctx = ReadOnlyContext(tool)
-	previous_flag = frappe.flags.ast_read_only
+	identity = _capture_identity()
+	previous_flag = _ast_flag("ast_read_only")
 	previous_control = db._disable_transaction_control  # AST-ALLOWED: G1 layer 3: transaction control
-	stack = frappe.flags.ast_guard_stack
+	stack = _ast_flag("ast_guard_stack")
 	if stack is None:
-		stack = frappe.flags.ast_guard_stack = []
+		stack = []
+		_set_ast_flag("ast_guard_stack", stack)
 
-	frappe.flags.ast_read_only = True
+	_set_ast_flag("ast_read_only", True)
 	db._disable_transaction_control = previous_control + 1  # frappe.db.commit() is now a no-op  # AST-ALLOWED: G1 layer 3: transaction control
 	ctx.baseline_writes = db.transaction_writes  # AST-ALLOWED: G1 layer 4: write counter
-	ctx.trap_base = frappe.flags.ast_trap_hits or 0
-	ctx.callback_managers = [db.before_commit, db.after_commit, db.before_rollback, db.after_rollback]  # AST-ALLOWED: G1 callback layer
-	ctx.callback_marks = [len(m._functions) for m in ctx.callback_managers]  # AST-ALLOWED: G1 callback layer
+	ctx.trap_base = _ast_flag("ast_trap_hits") or 0
+	ctx.callback_snapshots = _snapshot_callbacks()
 	try:
 		db.savepoint(ctx.savepoint)  # AST-ALLOWED: G1 layer 5: savepoint
 	except Exception:
-		frappe.flags.ast_read_only = previous_flag
+		_set_ast_flag("ast_read_only", previous_flag)
 		db._disable_transaction_control = previous_control  # AST-ALLOWED: G1 layer 3: restore transaction control
 		raise
 	stack.append(ctx)
@@ -134,10 +244,14 @@ def read_only_tool_context(tool: str = ""):
 		yield ctx
 	finally:
 		stack.pop()
-		ctx.callbacks_dropped = _drop_callbacks(ctx)
+		try:
+			ctx.identity_changes = _restore_identity(identity)  # first: everything below uses the original connection
+		except Exception:
+			ctx.identity_changes = ["identity could not be restored"]
+		_restore_callbacks(ctx)
 		# Read the counters BEFORE the rollback: ROLLBACK resets transaction_writes to 0 (database.py:470).
 		ctx.db_writes = max(0, db.transaction_writes - ctx.baseline_writes)  # AST-ALLOWED: G1 layer 4: read the write counter before the rollback
-		ctx.trap_hits = max(0, (frappe.flags.ast_trap_hits or 0) - ctx.trap_base)
+		ctx.trap_hits = max(0, (_ast_flag("ast_trap_hits") or 0) - ctx.trap_base)
 		savepoint_gone = False
 		try:
 			db.rollback(save_point=ctx.savepoint)  # AST-ALLOWED: guard layer 5, the savepoint rollback
@@ -149,7 +263,7 @@ def read_only_tool_context(tool: str = ""):
 			except Exception:
 				pass
 		finally:
-			frappe.flags.ast_read_only = previous_flag
+			_set_ast_flag("ast_read_only", previous_flag)
 			db._disable_transaction_control = previous_control  # AST-ALLOWED: G1: restore transaction control
 			db.transaction_writes = ctx.baseline_writes  # AST-ALLOWED: G1 layer 4: restore the write counter
 
@@ -157,38 +271,25 @@ def read_only_tool_context(tool: str = ""):
 			stack[-1].nested.append(ctx)
 		elif ctx.violation:
 			_log_violation(ctx)  # outermost only, after the flag is restored (the trap would block the log)
+		if ctx.identity_changes:
+			raise AssistantGuardError("identity or connection changed inside the tool context")
 		if savepoint_gone:
 			raise AssistantGuardError(
 				"The read-only savepoint no longer exists: something committed inside the tool context."
 			)
 
 
-def _drop_callbacks(ctx: ReadOnlyContext) -> int:
-	"""Remove the commit / rollback callbacks added since the context opened; return how many (M2b-R3).
-
-	The savepoint rollback only undoes SQL. A callback queued here would run at the next real commit, after the
-	guard is gone. That also covers `frappe.enqueue(..., enqueue_after_commit=True)` and realtime events queued
-	for after commit. Callbacks that were already queued before the context are left alone.
-	"""
-	dropped = 0
-	for manager, mark in zip(ctx.callback_managers, ctx.callback_marks, strict=True):
-		queue = manager._functions  # AST-ALLOWED: G1 callback layer
-		while len(queue) > mark:
-			queue.pop()
-			dropped += 1
-	return dropped
-
-
 def _log_violation(ctx: ReadOnlyContext):
 	"""Counts and the tool name only: never record data."""
 	summary = ctx.summary()
 	try:
-		frappe.log_error(
+		frappe.log_error(  # AST-ALLOWED: the violation log; counts only, never record data
 			title="AST write blocked",
 			message=(
 				f"user={frappe.session.user} tool={summary['tool'] or '(unnamed)'} "
 				f"db_writes_rolled_back={summary['db_writes']} trap_refusals={summary['trap_hits']} "
-					f"callbacks_dropped={summary['callbacks_dropped']}"
+				f"callbacks_dropped={summary['callbacks_dropped']} callbacks_restored={summary['callbacks_restored']} "
+				f"identity_changes={summary['identity_changes']}"
 			),
 		)
 	except Exception:
@@ -333,7 +434,7 @@ def readable_fields(doctype: str, parenttype: str | None = None) -> list[str]:
 
 
 def _message_log_size() -> int:
-	return len(frappe.local.message_log)  # always a list once frappe.init has run
+	return len(frappe.local.message_log)  # AST-ALLOWED: G4 message-log snapshot; always a list once frappe.init has run
 
 
 def load_readable(doctype, name):
@@ -361,7 +462,7 @@ def load_readable(doctype, name):
 	finally:
 		# get_doc's own "not found" message must not reach an HTTP response, or it would tell a missing
 		# record from a hidden one.
-		del frappe.local.message_log[log_size:]
+		del frappe.local.message_log[log_size:]  # AST-ALLOWED: G4: drop get_doc's own not-found message
 
 	allowed = bool(doc) and frappe.permissions.has_permission(doctype, "read", doc=doc, print_logs=False)
 	if not allowed:

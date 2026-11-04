@@ -1,5 +1,6 @@
 """The scanner (scripts/guard_scan.py) is clean on the app and fails on bad code."""
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,14 @@ from pathlib import Path
 import frappe
 
 from lending_assistant.tests.base import AssistantTestCase
+from lending_assistant.tests.scan_fixtures_r2 import (
+	BINDING,
+	DUNDER_NAMES,
+	FLAGS,
+	METHODS,
+	NOT_ALLOWED,
+	REVIEWER_50,
+)
 
 SCRIPT = Path(frappe.get_app_path("lending_assistant")).parent / "scripts" / "guard_scan.py"
 
@@ -187,24 +196,75 @@ VARIANTS = [
 	("f9 bound method alias", "db-read", "import frappe\n\ndef f():\n    run = frappe.db.sql\n"),
 ]
 
-# Forms the rework must NOT flag: ordinary reads of the identity, the message log, the cache and the meta.
+# Forms the scanner must NOT flag. Path -> code. These are the uses the allowlist (DECISIONS #43) exists for.
 CLEAN_FORMS = {
 	"assistant/tools/ok1.py": """
 		import frappe
-		import frappe.permissions
 		from frappe import _
-		from frappe.utils import now_datetime
+		from frappe.utils import now_datetime, strip_html_tags
 
 		def f(doc, values):
 		    user = frappe.session.user
-		    log = frappe.local.message_log
-		    del frappe.local.message_log[1:]
-		    frappe.cache.set_value("k", 1)
 		    frappe.get_meta("Loan")
-		    frappe.permissions.has_permission("Loan", "read")
+		    frappe.get_roles()
 		    doc.update(values)
 		    values.update({"a": 1})
-		    return user, log, _("x"), now_datetime()
+		    if not user:
+		        frappe.throw(_("x"), frappe.PermissionError)
+		    try:
+		        pass
+		    except (frappe.ValidationError, frappe.DoesNotExistError, frappe.RateLimitExceededError):
+		        raise frappe.PermissionError("no")
+		    return user, _("x"), now_datetime(), strip_html_tags("<b>x</b>")
+
+		class Refused(frappe.PermissionError):
+		    pass
+	""",
+	"assistant/access.py": """
+		import frappe
+		import frappe.permissions
+
+		def f():
+		    return frappe.permissions.has_permission("Loan", "read")
+	""",
+	"assistant/guard.py": """
+		import frappe
+		import frappe.permissions
+		from frappe.model import get_permitted_fields
+
+		def f(doc):
+		    stack = frappe.flags.get("ast_guard_stack")  # AST-ALLOWED: flags helper
+		    frappe.flags["ast_read_only"] = True  # AST-ALLOWED: flags helper
+		    size = len(frappe.local.message_log)  # AST-ALLOWED: message log snapshot
+		    frappe.log_error(title="t", message="m")  # AST-ALLOWED: violation log
+		    return stack, size, get_permitted_fields("Loan")
+	""",
+	"assistant/ratelimit.py": """
+		import frappe
+
+		def f():
+		    pipe = frappe.cache.pipeline()
+		    frappe.cache.expire(frappe.cache.make_key("k"), 60)
+		    return pipe
+	""",
+	"assistant/codereader.py": "import frappe\n\ndef f():\n    return frappe.utils.get_bench_path()\n",
+	"api/chat.py": """
+		import frappe
+
+		@frappe.whitelist(methods=["POST"])
+		def ask():
+		    return frappe.local.request_ip
+
+		@frappe.whitelist(methods=["POST"])
+		def feedback():
+		    return 1
+	""",
+	"lending_assistant/doctype/thing/thing.py": "from frappe.model.document import Document\n\n\nclass Thing(Document):\n    pass\n",
+	"assistant/tools/plain.py": """
+		def f(t, items):
+		    t.run()
+		    items.append(1)
+		    return sorted(items)
 	""",
 }
 
@@ -217,8 +277,19 @@ class TestGuardScan(AssistantTestCase):
 		self.addCleanup(shutil.rmtree, root, True)
 		return root
 
+	def assertFlagged(self, name, rule, code, path="assistant/tools/x.py"):
+		"""One tree for this one snippet: it must fail the scan on its own, with `rule` named."""
+		root = self.make_tree({path: code})
+		result = run("--root", root)
+		self.assertEqual(result.returncode, 1, f"{name} was not flagged:\n{result.stdout}")
+		self.assertIn(f"[{rule}]", result.stdout, f"{name}: expected rule [{rule}]\n{result.stdout}")
+
+	def assertClean(self, files, msg=""):
+		result = run("--root", self.make_tree(files))
+		self.assertEqual(result.returncode, 0, f"{msg}\n{result.stdout}")
+
 	def test_app_is_clean(self):
-		result = run()
+		result = run("--check-allowlist")
 		self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 		self.assertIn("clean", result.stdout)
 
@@ -287,6 +358,173 @@ class TestGuardScan(AssistantTestCase):
 				result = run("--root", root)
 				self.assertEqual(result.returncode, 1, f"{name} was not flagged:\n{result.stdout}")
 				self.assertIn(f"[{rule}]", result.stdout, f"{name}: expected rule [{rule}]\n{result.stdout}")
+
+	# --- M2b-R8 (DECISIONS #43): the allowlist method
+
+	def test_the_reviewers_50_variants_each_fail_on_their_own(self):
+		self.assertEqual(len(REVIEWER_50), 50)
+		for name, rule, code in REVIEWER_50:
+			with self.subTest(name):
+				self.assertFlagged(name, rule, code)
+
+	def test_a_early_and_later_variants_total_159(self):
+		"""109 from rework 1 (the Worker's) + 50 from its re-review (the Reviewer's): the full set is run."""
+		self.assertEqual(len(VARIANTS) + len(REVIEWER_50), 159)
+
+	def test_A_the_frappe_module_cannot_be_bound(self):
+		for name, code in BINDING:
+			with self.subTest(name):
+				self.assertFlagged(name, "alias", code)
+
+	def test_B_chains_not_on_the_allowlist_are_hits(self):
+		for name, code in NOT_ALLOWED:
+			with self.subTest(name):
+				self.assertFlagged(name, "not-allowed", code)
+
+	def test_B_a_marked_only_entry_needs_its_marker_and_its_file(self):
+		code = "import frappe\n\ndef f():\n    return frappe.flags.get('ast_read_only')\n"
+		self.assertFlagged("marked entry, no marker", "not-allowed", code, "assistant/guard.py")
+		marked = code.replace("')\n", "')  # AST-ALLOWED: helper\n")
+		self.assertClean({"assistant/guard.py": marked}, "marked, in guard.py")
+		self.assertFlagged("marked entry in the wrong file", "not-allowed", marked, "assistant/access.py")
+		self.assertFlagged("marked entry in a tool", "not-allowed", marked)
+		self.assertFlagged("a marker without a reason", "not-allowed", code.replace("')\n", "')  # AST-ALLOWED:\n"), "assistant/guard.py")
+
+	def test_B_each_file_restricted_entry_works_only_in_its_files(self):
+		restricted = {
+			"has_permission": ("import frappe\nimport frappe.permissions\n\ndef f():\n    return frappe.permissions.has_permission('Loan', 'read')\n", ("assistant/guard.py", "assistant/access.py")),
+			"cache": ("import frappe\n\ndef f():\n    return frappe.cache.make_key('k')\n", ("assistant/ratelimit.py",)),
+			"request_ip": ("import frappe\n\ndef f():\n    return frappe.local.request_ip\n", ("api/chat.py",)),
+			"bench_path": ("import frappe\n\ndef f():\n    return frappe.utils.get_bench_path()\n", ("assistant/codereader.py",)),
+			"whitelist": ("import frappe\n\n@frappe.whitelist(methods=['POST'])\ndef ask():\n    return 1\n", ("api/chat.py",)),
+		}
+		for name, (code, ok_files) in restricted.items():
+			for rel in ok_files:
+				if name == "has_permission" or name == "whitelist":
+					self.assertClean({rel: code}, f"{name} in {rel}")
+				else:
+					self.assertClean({rel: code}, f"{name} in {rel}")
+			self.assertFlagged(f"{name} in a tool", "not-allowed" if name != "whitelist" else "whitelist", code)
+
+	def test_C_imports_are_allowlisted(self):
+		bad = {
+			"import frappe.model.document": "import frappe.model.document\n",
+			"import frappe.utils": "import frappe.utils\n",
+			"from frappe import throw": "from frappe import throw\n",
+			"from frappe import local": "from frappe import local\n",
+			"from frappe.utils import cint": "from frappe.utils import cint\n",
+			"from frappe.permissions import has_permission": "from frappe.permissions import has_permission\n",
+			"from frappe.model.document import Document in a tool": "from frappe.model.document import Document\n",
+			"from frappe.database.query import Engine": "from frappe.database.query import Engine\n",
+			"from frappe.auth import LoginManager": "from frappe.auth import LoginManager\n",
+			"from frappe.query_builder import DocType": "from frappe.query_builder import DocType\n",
+			"from frappe.model.document import get_doc": "from frappe.model.document import get_doc\n",
+			"star import of another module": "from os.path import *\n",
+		}
+		for name, code in bad.items():
+			with self.subTest(name):
+				self.assertFlagged(name, "import", code)
+		# an allowed import under another name is an alias (A), not a new import
+		self.assertFlagged("from frappe import _ as t", "alias", "from frappe import _ as t\n")
+		self.assertFlagged("now_datetime as n", "alias", "from frappe.utils import now_datetime as n\n")
+		# an entry that is allowed only in some files
+		self.assertFlagged("import frappe.permissions in a tool", "import", "import frappe.permissions\n")
+		self.assertFlagged("get_permitted_fields in access.py", "import", "from frappe.model import get_permitted_fields\n", "assistant/access.py")
+		self.assertFlagged("a marker never excuses an import", "import", "from frappe import throw  # AST-ALLOWED: because\n", "assistant/guard.py")
+
+	def test_C_doctype_controllers_may_import_document_as_a_class_base_only(self):
+		base = "from frappe.model.document import Document\n\n\nclass Thing(Document):\n    pass\n"
+		self.assertClean({"lending_assistant/doctype/thing/thing.py": base}, "controller")
+		self.assertClean({"other/doctype/thing/thing.py": base}, "any doctype folder")
+		self.assertFlagged("Document in a tool", "import", base, "assistant/tools/thing.py")
+		called = "from frappe.model.document import Document\n\n\ndef f():\n    return Document('Loan', 'x')\n"
+		self.assertFlagged("Document(...) in a controller", "not-allowed", called, "lending_assistant/doctype/thing/thing.py")
+		value = "from frappe.model.document import Document\n\nx = Document\n"
+		self.assertFlagged("Document as a value", "not-allowed", value, "lending_assistant/doctype/thing/thing.py")
+
+	def test_D_method_names_are_banned_whatever_the_receiver(self):
+		for method, rule in METHODS:
+			with self.subTest(method):
+				self.assertFlagged(method, rule, f"def f(x):\n    return x.{method}()\n")
+		self.assertFlagged("run on a query builder", "qb", "def f(q):\n    return q.from_('x').select('y').run()\n")
+		self.assertFlagged("run on a query", "qb", "def f(query):\n    return query.run()\n")
+		self.assertClean({"assistant/tools/plain.py": "def f(t):\n    return t.run()\n"}, "run on something that is not a query")
+
+	def test_D_a_marker_excuses_a_method_only_in_the_file_that_may_use_it(self):
+		self.assertClean({"assistant/audit.py": "def f(doc):\n    doc.insert()  # AST-ALLOWED: own log\n"})
+		self.assertFlagged("insert marked in a tool", "write", "def f(doc):\n    doc.insert()  # AST-ALLOWED: please\n")
+		self.assertFlagged("get_password marked in a tool", "secrets", "def f(doc):\n    doc.get_password('k')  # AST-ALLOWED: please\n")
+		self.assertClean({"assistant/settings.py": "def f(doc):\n    return doc.get_password('k')  # AST-ALLOWED: the one key reader\n"})
+		for method in ("connect", "init", "login_as", "set_user"):
+			self.assertFlagged(f"{method} marked in guard.py", "identity-call", f"def f(x):\n    x.{method}()  # AST-ALLOWED: please\n", "assistant/guard.py")
+
+	def test_E_dunders_and_builtins(self):
+		for name in DUNDER_NAMES:
+			with self.subTest(name):
+				self.assertFlagged(f"attribute {name}", "dynamic", f"def f(x):\n    return x.{name}\n")
+				self.assertFlagged(f"subscript {name}", "dynamic", f"def f(x):\n    return x['{name}']\n")
+		self.assertFlagged("bare __builtins__", "dynamic", "def f():\n    return __builtins__\n")
+		self.assertFlagged("getattr (kept)", "dynamic", "def f(x):\n    return getattr(x, 'a')\n")
+		self.assertFlagged("importlib (kept)", "generic-exec", "import importlib\n")
+		self.assertFlagged("builtins (kept)", "generic-exec", "import builtins\n")
+
+	def test_F_secrets_are_hits_outside_install(self):
+		for code in (
+			"import frappe\n\ndef f():\n    return frappe.conf.db_password\n",
+			"import frappe\n\ndef f():\n    return frappe.conf['db_password']\n",
+			"import frappe\n\ndef f():\n    return frappe.local.conf.db_password\n",
+			"import frappe\n\ndef f():\n    return frappe.get_site_config()\n",
+			"def f(x):\n    return x.get_site_config()\n",
+		):
+			with self.subTest(code):
+				self.assertFlagged("secret", "secrets", code)
+				self.assertFlagged("secret marked in guard.py", "secrets", code.replace("\n", "  # AST-ALLOWED: please\n", 4) if False else code + "# AST-ALLOWED: please\n", "assistant/guard.py")
+		marked = "import frappe\n\ndef f():\n    return frappe.conf.site_name  # AST-ALLOWED: install reads the site name\n"
+		self.assertClean({"install.py": marked}, "install.py")
+		self.assertFlagged("marked outside install.py", "secrets", marked, "assistant/guard.py")
+
+	def test_G_flags_cannot_be_written_or_mutated(self):
+		for name, code in FLAGS:
+			with self.subTest(name):
+				self.assertFlagged(name, "flags", code)
+				marked_elsewhere = "\n".join(line + "  # AST-ALLOWED: please" if line.startswith("    ") else line for line in code.splitlines()) + "\n"
+				self.assertFlagged(name + ", marked in a tool", "flags", marked_elsewhere)
+
+	def test_a_new_allowlist_entry_is_needed_before_new_code_can_use_a_chain(self):
+		"""The burden is reversed: unknown chains are hits, so new code needs an entry (and a review)."""
+		self.assertFlagged("fresh chain", "not-allowed", "import frappe\n\ndef f():\n    return frappe.get_hooks('x')\n")
+
+	def test_the_allowlist_has_no_dead_entries(self):
+		spec = importlib.util.spec_from_file_location("guard_scan_for_test", SCRIPT)
+		module = importlib.util.module_from_spec(spec)
+		sys.modules[spec.name] = module
+		spec.loader.exec_module(module)
+		try:
+			result = module.scan(SCRIPT.parent.parent, strict=True)
+		finally:
+			sys.modules.pop(spec.name, None)
+		self.assertEqual(result.problems, [])
+		self.assertEqual(result.unused_entries, [], "allowlist entries the app does not use widen the hole")
+		self.assertGreater(len(module.ENTRIES), 20)
+
+	def test_a_dead_entry_and_a_stale_marker_are_reported(self):
+		root = self.make_tree({"assistant/x.py": "import frappe\n\ndef f():\n    return 1  # AST-ALLOWED: nothing here needs it\n"})
+		result = run("--root", root, "--check-allowlist")
+		self.assertEqual(result.returncode, 1)
+		self.assertIn("dead entry", result.stdout)
+		self.assertIn("excuses nothing", result.stdout)
+		self.assertEqual(run("--root", root).returncode, 0)  # without the flag only real hits fail
+
+	def test_every_marker_in_the_app_has_a_reason(self):
+		package = Path(frappe.get_app_path("lending_assistant"))
+		for path in list(package.rglob("*.py")) + list(package.rglob("*.js")):
+			rel = path.relative_to(package).as_posix()
+			if "tests/" in rel or "node_modules" in rel or "/dist/" in rel:
+				continue
+			for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+				if "AST-ALLOWED:" in line:
+					reason = line.split("AST-ALLOWED:", 1)[1].strip()
+					self.assertTrue(reason, f"{rel}:{number}: AST-ALLOWED without a reason")
 
 	def test_ordinary_reads_are_not_flagged(self):
 		root = self.make_tree(CLEAN_FORMS)

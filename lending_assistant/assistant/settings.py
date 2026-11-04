@@ -20,4 +20,4 @@ def get_api_key() -> str | None:
 
 	Not called anywhere in M1.
 	"""
-	return get_settings().get_password("api_key", raise_exception=False)
+	return get_settings().get_password("api_key", raise_exception=False)  # AST-ALLOWED: the one reader of the API key (G8), server-side only

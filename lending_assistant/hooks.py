@@ -8,7 +8,7 @@ app_license = "mit"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["erpnext", "lending"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -25,8 +25,8 @@ app_license = "mit"
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/lending_assistant/css/lending_assistant.css"
-# app_include_js = "/assets/lending_assistant/js/lending_assistant.js"
+app_include_css = "/assets/lending_assistant/css/chat_widget.css"
+app_include_js = "/assets/lending_assistant/js/chat_widget.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/lending_assistant/css/lending_assistant.css"
@@ -86,7 +86,7 @@ app_license = "mit"
 # ------------
 
 # before_install = "lending_assistant.install.before_install"
-# after_install = "lending_assistant.install.after_install"
+after_install = "lending_assistant.install.after_install"
 
 # Uninstallation
 # ------------
@@ -262,3 +262,14 @@ app_license = "mit"
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
+
+# Fixtures
+# --------
+# Only the two Assistant roles are exported (DECISIONS #2). The filter must stay name-based so that
+# `bench export-fixtures` never drags other Roles into the app.
+fixtures = [
+	{
+		"dt": "Role",
+		"filters": [["name", "in", ["Assistant User", "Assistant Reviewer"]]],
+	}
+]

@@ -125,14 +125,18 @@ class TestReadOnlyContext(GuardTestCase):
 		self.assertUnchanged()
 
 	def test_save_rolled_back_even_if_the_trap_is_bypassed(self):
-		"""Layer 5 on its own: switch the flag off inside the context so no hook fires."""
-		with guard.read_only_tool_context("AST-TEST-t") as ctx:
-			frappe.flags.ast_read_only = False  # simulate a bypass of the trap
-			doc = frappe.get_doc(CATEGORY, self.cat.name)
-			doc.loan_category_name = "AST-BYPASS"
-			doc.save()
-			frappe.get_doc({"doctype": CATEGORY, "loan_category_code": "AST-B2", "loan_category_name": "AST-B2"}).insert()
+		"""Layer 5 on its own: switch the flag off inside the context so no hook fires.
+
+		Since M2b rework 4 (I4) the flag change itself is also a violation, so the context raises on exit."""
+		with self.assertRaises(guard.AssistantGuardError):
+			with guard.read_only_tool_context("AST-TEST-t") as ctx:
+				frappe.flags.ast_read_only = False  # simulate a bypass of the trap
+				doc = frappe.get_doc(CATEGORY, self.cat.name)
+				doc.loan_category_name = "AST-BYPASS"
+				doc.save()
+				frappe.get_doc({"doctype": CATEGORY, "loan_category_code": "AST-B2", "loan_category_name": "AST-B2"}).insert()
 		self.assertGreaterEqual(ctx.db_writes, 2)
+		self.assertIn("guard flag changed inside the context", ctx.identity_changes)
 		self.assertUnchanged()
 
 	def test_commit_is_a_no_op_and_the_write_is_still_rolled_back(self):

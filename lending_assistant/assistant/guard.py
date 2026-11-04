@@ -76,7 +76,8 @@ class ReadOnlyContext:
 		self.trap_hits = 0  # writes the doc_events trap refused
 		self.callbacks_dropped = 0  # commit / rollback callbacks registered inside the context and removed
 		self.callbacks_restored = 0  # earlier callbacks the tool consumed inside the context and we put back
-		self.identity_changes: list[str] = []  # what changed under the tool: user, session, connection, site, flags
+		self.identity_changes: list[str] = []  # what changed under the tool: user, session, connection, site, flags,
+		# callback queues that could not be checked or restored (M2b-R19), the guard flag (I4)
 		self.savepoint_gone = False  # a raw COMMIT or DDL removed the savepoint: something was committed (M2b-R14)
 		self.nested: list["ReadOnlyContext"] = []
 
@@ -290,33 +291,54 @@ def _snapshot_callbacks() -> list:
 	return [(manager, manager._functions, list(manager._functions)) for manager in managers]  # AST-ALLOWED: G1 callback layer
 
 
-def _restore_callbacks(ctx: ReadOnlyContext, snapshots: list) -> None:
-	"""Put every queue back to exactly its contents on entry (M2b-R3, R9).
+def _restore_callbacks(ctx: ReadOnlyContext, snapshots: list) -> list[str]:
+	"""Put every queue back to exactly its contents on entry (M2b-R3, R9). Returns what could not be checked or restored.
 
 	The savepoint rollback only undoes SQL. A callback queued here would run at the next real commit, after the
 	guard is gone (that includes `frappe.enqueue(..., enqueue_after_commit=True)` and deferred realtime events).
 	Compared by identity of the function, so a context that consumed earlier callbacks and then added as many
 	new ones does not hide the swap. A replaced queue object is replaced back.
+
+	Each queue is handled on its own (M2b-R19): a queue whose contents cannot be read (the tool replaced it with
+	something that is not a list) is reported, and the original queue object is still put back.
 	"""
+	problems = []
 	for manager, queue, before in snapshots:
-		now = Counter(id(fn) for fn in list(manager._functions))  # AST-ALLOWED: G1 callback layer
-		kept = Counter(id(fn) for fn in before)
-		ctx.callbacks_dropped += sum((now - kept).values())  # added inside: never run
-		ctx.callbacks_restored += sum((kept - now).values())  # earlier ones the tool consumed: put back
-		manager._functions = queue  # AST-ALLOWED: G1 callback layer: the original queue object, even if it was replaced
-		queue.clear()
-		queue.extend(before)
+		try:
+			now = Counter(id(fn) for fn in list(manager._functions))  # AST-ALLOWED: G1 callback layer
+			kept = Counter(id(fn) for fn in before)
+			ctx.callbacks_dropped += sum((now - kept).values())  # added inside: never run
+			ctx.callbacks_restored += sum((kept - now).values())  # earlier ones the tool consumed: put back
+		except Exception:
+			problems.append("callbacks could not be checked")
+		try:
+			manager._functions = queue  # AST-ALLOWED: G1 callback layer: the original queue object, even if it was replaced
+			queue.clear()
+			queue.extend(before)
+		except Exception:
+			problems.append("callbacks could not be restored")
+	return problems
 
 
 @contextmanager
 def read_only_tool_context(tool: str = ""):
 	"""Run a tool so that nothing it does can reach the database (G1 layers 2-5, plus the identity check).
 
-	On exit, always (success, exception, nested), in this order: put back the identity and connection the tool started
-	with (in its own try/finally, so a failure further down cannot skip it), restore the callback queues, roll back
-	to the savepoint, record a violation if anything was counted, and put the flag and the transaction-control counter
-	back exactly as found. If the savepoint is gone (a raw COMMIT or DDL ran) or the identity or connection changed,
-	it raises AssistantGuardError.
+	On exit (success, exception, nested), in this order. Each step is in its own `try`, so an `Exception` raised by
+	one step does not skip the steps after it:
+	1. put back the identity and connection the tool started with;
+	2. put back the four commit / rollback callback queues;
+	3. read the write and trap counters, and check that the guard flag `ast_read_only` is still True;
+	4. roll back to the savepoint (a failure means the savepoint is gone), then put the guard flag, the
+	   transaction-control counter and the write counter back exactly as found;
+	5. outermost context only: log one violation row if anything was counted (after step 4, so the trap does not
+	   block the log; a failing log is swallowed).
+	Then it raises AssistantGuardError if the identity, connection, callback queues or guard flag had to be put back
+	or could not be, or if the savepoint was gone.
+
+	Not covered: a `BaseException` that is not an `Exception` (KeyboardInterrupt, SystemExit) raised by steps 1-3
+	skips the steps after it except the reset in step 4, which is in a `finally`. A COMMIT that already happened on
+	another connection, and a reference the tool kept to a swapped-in connection, are known limits (DECISIONS #46, #47).
 	"""
 	ctx = ReadOnlyContext(tool)
 	identity = _capture_identity()
@@ -353,19 +375,31 @@ def read_only_tool_context(tool: str = ""):
 			except Exception:
 				ctx.identity_changes = ["identity could not be restored"]
 		finally:
-			_restore_callbacks(ctx, callback_snapshots)
-			# Read the counters BEFORE the rollback: ROLLBACK resets transaction_writes to 0 (database.py:470).
-			ctx.db_writes = max(0, db.transaction_writes - ctx.baseline_writes)  # AST-ALLOWED: G1 layer 4: read the write counter before the rollback
-			ctx.trap_hits = max(0, (_ast_flag("ast_trap_hits") or 0) - ctx.trap_base)
 			try:
-				db.rollback(save_point=ctx.savepoint)  # AST-ALLOWED: guard layer 5, the savepoint rollback
-			except Exception:
-				ctx.savepoint_gone = True
-			else:
 				try:
-					db.release_savepoint(ctx.savepoint)
+					ctx.identity_changes += _restore_callbacks(ctx, callback_snapshots)
 				except Exception:
-					pass
+					ctx.identity_changes.append("callbacks could not be restored")  # M2b-R19: the steps below still run
+				try:
+					# Read the counters BEFORE the rollback: ROLLBACK resets transaction_writes to 0 (database.py:470).
+					ctx.db_writes = max(0, db.transaction_writes - ctx.baseline_writes)  # AST-ALLOWED: G1 layer 4: read the write counter before the rollback
+				except Exception:
+					ctx.db_writes = 1  # the counter could not be read: assume a write, so it is logged
+				try:
+					ctx.trap_hits = max(0, (_ast_flag("ast_trap_hits") or 0) - ctx.trap_base)
+					if _ast_flag("ast_read_only") is not True:
+						ctx.identity_changes.append("guard flag changed inside the context")  # I4
+				except Exception:
+					ctx.identity_changes.append("guard flag could not be read")
+				try:
+					db.rollback(save_point=ctx.savepoint)  # AST-ALLOWED: guard layer 5, the savepoint rollback
+				except Exception:
+					ctx.savepoint_gone = True
+				else:
+					try:
+						db.release_savepoint(ctx.savepoint)
+					except Exception:
+						pass
 			finally:
 				_set_ast_flag("ast_read_only", previous_flag)
 				db._disable_transaction_control = previous_control  # AST-ALLOWED: G1: restore transaction control
@@ -376,7 +410,9 @@ def read_only_tool_context(tool: str = ""):
 		elif ctx.violation:
 			_log_violation(ctx)  # outermost only, after the flag is restored (the trap would block the log)
 		if ctx.identity_changes:
-			raise AssistantGuardError("identity or connection changed inside the tool context")
+			raise AssistantGuardError(
+				"identity or connection changed inside the tool context: " + ", ".join(ctx.identity_changes)
+			)
 		if ctx.savepoint_gone:
 			raise AssistantGuardError(
 				"The read-only savepoint no longer exists: something committed inside the tool context."

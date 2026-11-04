@@ -35,7 +35,8 @@ convenience (a framework API called directly, a private helper imported, a modul
 Deliberate obfuscation, code whose only purpose is to evade a syntactic scan, is out of scope here. It is covered by the
 M4 line-by-line review of every tool module and by per-persona permission tests through each tool.
 
-KNOWN LIMITS: the table with the reason and the covering layer for each is in build/reports/M2b_r3_report.md. In short, a
+KNOWN LIMITS: the table with the reason and the covering layer for each is in build/reports/M2b_r3_report.md (limit 2
+reworded in M2b_r4_report.md: lending / erpnext helper imports are the most plausible case). In short, a
 syntactic scan can't follow values computed at run time, a method on an object it cannot type, hook strings, or non-Python
 files; and it can't see "switch the user and switch back" inside one call. The run-time layers in `assistant/guard.py`
 (write trap, savepoint rollback, identity and connection check, callback and flag snapshots) and the Reviewer's greps are

@@ -1,0 +1,161 @@
+{
+	"actions": [],
+	"creation": "2026-11-04 13:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"switches_section",
+		"enabled",
+		"live_data",
+		"column_break_sw",
+		"code_reader",
+		"web_search",
+		"model_section",
+		"api_key",
+		"default_model",
+		"deep_model",
+		"max_tokens",
+		"limits_section",
+		"rate_limit_per_user",
+		"rate_limit_window_seconds",
+		"retention_days",
+		"lists_section",
+		"doctype_allowlist",
+		"code_app_allowlist",
+		"never_send_fields"
+	],
+	"fields": [
+		{
+			"fieldname": "switches_section",
+			"fieldtype": "Section Break",
+			"label": "Switches (all off by default)"
+		},
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Enabled",
+			"default": "0"
+		},
+		{
+			"fieldname": "live_data",
+			"fieldtype": "Check",
+			"label": "Live data",
+			"default": "0",
+			"description": "Allow tools to read live site records (M4)."
+		},
+		{
+			"fieldname": "column_break_sw",
+			"fieldtype": "Column Break",
+			"label": "Column Break Sw"
+		},
+		{
+			"fieldname": "code_reader",
+			"fieldtype": "Check",
+			"label": "Code reader",
+			"default": "0",
+			"description": "Allow reading allowlisted app code (M2/M4)."
+		},
+		{
+			"fieldname": "web_search",
+			"fieldtype": "Check",
+			"label": "Web search",
+			"default": "0",
+			"description": "Allow the Claude web search tool (M4)."
+		},
+		{
+			"fieldname": "model_section",
+			"fieldtype": "Section Break",
+			"label": "Claude API"
+		},
+		{
+			"fieldname": "api_key",
+			"fieldtype": "Password",
+			"label": "API key",
+			"description": "Stored encrypted; readable by System Manager only."
+		},
+		{
+			"fieldname": "default_model",
+			"fieldtype": "Data",
+			"label": "Default model",
+			"default": "claude-sonnet-5-5"
+		},
+		{
+			"fieldname": "deep_model",
+			"fieldtype": "Data",
+			"label": "Deep analysis model",
+			"default": "claude-opus-5-5"
+		},
+		{
+			"fieldname": "max_tokens",
+			"fieldtype": "Int",
+			"label": "Max tokens",
+			"default": "4096"
+		},
+		{
+			"fieldname": "limits_section",
+			"fieldtype": "Section Break",
+			"label": "Limits"
+		},
+		{
+			"fieldname": "rate_limit_per_user",
+			"fieldtype": "Int",
+			"label": "Requests per user per window",
+			"default": "30"
+		},
+		{
+			"fieldname": "rate_limit_window_seconds",
+			"fieldtype": "Int",
+			"label": "Window (seconds)",
+			"default": "3600"
+		},
+		{
+			"fieldname": "retention_days",
+			"fieldtype": "Int",
+			"label": "Log retention (days)",
+			"default": "180",
+			"description": "Stored only; the clean-up job comes in M7."
+		},
+		{
+			"fieldname": "lists_section",
+			"fieldtype": "Section Break",
+			"label": "Allowlists"
+		},
+		{
+			"fieldname": "doctype_allowlist",
+			"fieldtype": "Table",
+			"label": "Doctype allowlist",
+			"options": "Assistant Allowed Doctype"
+		},
+		{
+			"fieldname": "code_app_allowlist",
+			"fieldtype": "Table",
+			"label": "Code app allowlist",
+			"options": "Assistant Code App"
+		},
+		{
+			"fieldname": "never_send_fields",
+			"fieldtype": "Table",
+			"label": "Never send to model",
+			"options": "Assistant Never Send Field"
+		}
+	],
+	"links": [],
+	"modified": "2026-11-04 13:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Lending Assistant",
+	"name": "Assistant Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"issingle": 1,
+	"index_web_pages_for_search": 0
+}

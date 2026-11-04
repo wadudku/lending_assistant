@@ -1,0 +1,237 @@
+{
+	"actions": [],
+	"creation": "2026-11-04 13:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"conversation",
+		"user",
+		"status",
+		"depth",
+		"deep",
+		"model",
+		"route_section",
+		"route_doctype",
+		"route_docname",
+		"route",
+		"qa_section",
+		"question",
+		"answer",
+		"usage_section",
+		"roles",
+		"tokens_in",
+		"column_break_u",
+		"tokens_out",
+		"latency_ms",
+		"audit_section",
+		"tool_calls",
+		"records_read",
+		"code_files_read",
+		"cards_used",
+		"web_sources",
+		"feedback_section",
+		"feedback",
+		"feedback_comment"
+	],
+	"fields": [
+		{
+			"fieldname": "conversation",
+			"fieldtype": "Link",
+			"label": "Conversation",
+			"options": "Assistant Conversation",
+			"reqd": 1,
+			"read_only": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"label": "User",
+			"options": "User",
+			"read_only": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "ok\nerror\nlimited",
+			"default": "ok",
+			"read_only": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "depth",
+			"fieldtype": "Select",
+			"label": "Depth",
+			"options": "Business\nTechnical\nBoth",
+			"default": "Both",
+			"read_only": 1
+		},
+		{
+			"fieldname": "deep",
+			"fieldtype": "Check",
+			"label": "Deep analysis",
+			"read_only": 1
+		},
+		{
+			"fieldname": "model",
+			"fieldtype": "Data",
+			"label": "Model",
+			"read_only": 1
+		},
+		{
+			"fieldname": "route_section",
+			"fieldtype": "Section Break",
+			"label": "Route"
+		},
+		{
+			"fieldname": "route_doctype",
+			"fieldtype": "Data",
+			"label": "Route doctype",
+			"read_only": 1
+		},
+		{
+			"fieldname": "route_docname",
+			"fieldtype": "Data",
+			"label": "Route docname",
+			"read_only": 1
+		},
+		{
+			"fieldname": "route",
+			"fieldtype": "Small Text",
+			"label": "Route",
+			"read_only": 1
+		},
+		{
+			"fieldname": "qa_section",
+			"fieldtype": "Section Break",
+			"label": "Exchange"
+		},
+		{
+			"fieldname": "question",
+			"fieldtype": "Long Text",
+			"label": "Question",
+			"read_only": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "answer",
+			"fieldtype": "Long Text",
+			"label": "Answer",
+			"read_only": 1
+		},
+		{
+			"fieldname": "usage_section",
+			"fieldtype": "Section Break",
+			"label": "Usage"
+		},
+		{
+			"fieldname": "roles",
+			"fieldtype": "JSON",
+			"label": "Roles (snapshot)",
+			"read_only": 1
+		},
+		{
+			"fieldname": "tokens_in",
+			"fieldtype": "Int",
+			"label": "Tokens in",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_u",
+			"fieldtype": "Column Break",
+			"label": "Column Break U"
+		},
+		{
+			"fieldname": "tokens_out",
+			"fieldtype": "Int",
+			"label": "Tokens out",
+			"read_only": 1
+		},
+		{
+			"fieldname": "latency_ms",
+			"fieldtype": "Int",
+			"label": "Latency (ms)",
+			"read_only": 1
+		},
+		{
+			"fieldname": "audit_section",
+			"fieldtype": "Section Break",
+			"label": "Audit details (filled from M4)"
+		},
+		{
+			"fieldname": "tool_calls",
+			"fieldtype": "JSON",
+			"label": "Tool calls",
+			"read_only": 1
+		},
+		{
+			"fieldname": "records_read",
+			"fieldtype": "JSON",
+			"label": "Records read",
+			"read_only": 1
+		},
+		{
+			"fieldname": "code_files_read",
+			"fieldtype": "JSON",
+			"label": "Code files read",
+			"read_only": 1
+		},
+		{
+			"fieldname": "cards_used",
+			"fieldtype": "JSON",
+			"label": "Cards used",
+			"read_only": 1
+		},
+		{
+			"fieldname": "web_sources",
+			"fieldtype": "JSON",
+			"label": "Web sources",
+			"read_only": 1
+		},
+		{
+			"fieldname": "feedback_section",
+			"fieldtype": "Section Break",
+			"label": "Feedback"
+		},
+		{
+			"fieldname": "feedback",
+			"fieldtype": "Select",
+			"label": "Feedback",
+			"options": "\nup\ndown",
+			"read_only": 1
+		},
+		{
+			"fieldname": "feedback_comment",
+			"fieldtype": "Small Text",
+			"label": "Feedback comment",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-11-04 13:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Lending Assistant",
+	"name": "Assistant Message",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"role": "Assistant User",
+			"read": 1,
+			"if_owner": 1
+		},
+		{
+			"role": "System Manager",
+			"read": 1,
+			"delete": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"autoname": "hash",
+	"in_create": 1,
+	"index_web_pages_for_search": 0
+}

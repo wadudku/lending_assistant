@@ -6,6 +6,7 @@ widget are hints at most: they never decide who the user is or what they may do 
 """
 
 import frappe
+import frappe.permissions  # not loaded by `bench execute` or a worker until something imports it (M2b-R4)
 
 from lending_assistant.assistant import guard
 

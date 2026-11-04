@@ -3,7 +3,9 @@
 What is here:
 
 * `read_only_tool_context()`: blocks writes (layer 2, the `doc_events` trap), turns `frappe.db.commit()` into a
-  no-op (layer 3), counts write statements (layer 4) and always rolls back to a savepoint (layer 5).
+  no-op (layer 3), counts write statements (layer 4) and always rolls back to a savepoint (layer 5). It also
+  drops any commit / rollback callback (`frappe.db.after_commit.add(...)`, `enqueue_after_commit=True`)
+  registered while it was open, because the rollback does not undo those (DECISIONS #40).
 * `read_doc()` / `list_records()`: the only ways a tool reads business records. They check the doctype
   allowlist and the Live data switch, read as the session user, filter fields (permlevel, never-send, Password),
   cap the size, and return one `<data>` envelope.
@@ -20,6 +22,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 import frappe
+import frappe.permissions  # not loaded by `bench execute` or a worker until something imports it (M2b-R4)
 from frappe.model import get_permitted_fields
 
 from lending_assistant.assistant import settings
@@ -70,17 +73,23 @@ class ReadOnlyContext:
 		self.trap_base = 0
 		self.db_writes = 0  # write statements the tool made (counted before the rollback)
 		self.trap_hits = 0  # writes the doc_events trap refused
+		self.callbacks_dropped = 0  # commit / rollback callbacks registered inside the context and removed
+		self.callback_managers: list = []
+		self.callback_marks: list[int] = []  # their lengths on entry
 		self.nested: list["ReadOnlyContext"] = []
 
 	@property
 	def violation(self) -> bool:
-		return bool(self.db_writes or self.trap_hits or any(c.violation for c in self.nested))
+		return bool(
+			self.db_writes or self.trap_hits or self.callbacks_dropped or any(c.violation for c in self.nested)
+		)
 
 	def summary(self) -> dict:
 		return {
 			"tool": self.tool,
 			"db_writes": self.db_writes + sum(c.summary()["db_writes"] for c in self.nested),
 			"trap_hits": self.trap_hits + sum(c.summary()["trap_hits"] for c in self.nested),
+			"callbacks_dropped": self.callbacks_dropped + sum(c.summary()["callbacks_dropped"] for c in self.nested),
 		}
 
 
@@ -99,7 +108,7 @@ def read_only_tool_context(tool: str = ""):
 	statements were counted, and put the flag and the transaction-control counter back exactly as found.
 	If the savepoint is gone (a raw COMMIT or DDL ran) it raises AssistantGuardError.
 	"""
-	db = frappe.db
+	db = frappe.db  # AST-ALLOWED: G1 layers 3-5 need the connection object for the whole block
 	ctx = ReadOnlyContext(tool)
 	previous_flag = frappe.flags.ast_read_only
 	previous_control = db._disable_transaction_control  # AST-ALLOWED: G1 layer 3: transaction control
@@ -111,6 +120,8 @@ def read_only_tool_context(tool: str = ""):
 	db._disable_transaction_control = previous_control + 1  # frappe.db.commit() is now a no-op  # AST-ALLOWED: G1 layer 3: transaction control
 	ctx.baseline_writes = db.transaction_writes  # AST-ALLOWED: G1 layer 4: write counter
 	ctx.trap_base = frappe.flags.ast_trap_hits or 0
+	ctx.callback_managers = [db.before_commit, db.after_commit, db.before_rollback, db.after_rollback]  # AST-ALLOWED: G1 callback layer
+	ctx.callback_marks = [len(m._functions) for m in ctx.callback_managers]  # AST-ALLOWED: G1 callback layer
 	try:
 		db.savepoint(ctx.savepoint)  # AST-ALLOWED: G1 layer 5: savepoint
 	except Exception:
@@ -123,6 +134,7 @@ def read_only_tool_context(tool: str = ""):
 		yield ctx
 	finally:
 		stack.pop()
+		ctx.callbacks_dropped = _drop_callbacks(ctx)
 		# Read the counters BEFORE the rollback: ROLLBACK resets transaction_writes to 0 (database.py:470).
 		ctx.db_writes = max(0, db.transaction_writes - ctx.baseline_writes)  # AST-ALLOWED: G1 layer 4: read the write counter before the rollback
 		ctx.trap_hits = max(0, (frappe.flags.ast_trap_hits or 0) - ctx.trap_base)
@@ -151,6 +163,22 @@ def read_only_tool_context(tool: str = ""):
 			)
 
 
+def _drop_callbacks(ctx: ReadOnlyContext) -> int:
+	"""Remove the commit / rollback callbacks added since the context opened; return how many (M2b-R3).
+
+	The savepoint rollback only undoes SQL. A callback queued here would run at the next real commit, after the
+	guard is gone. That also covers `frappe.enqueue(..., enqueue_after_commit=True)` and realtime events queued
+	for after commit. Callbacks that were already queued before the context are left alone.
+	"""
+	dropped = 0
+	for manager, mark in zip(ctx.callback_managers, ctx.callback_marks, strict=True):
+		queue = manager._functions  # AST-ALLOWED: G1 callback layer
+		while len(queue) > mark:
+			queue.pop()
+			dropped += 1
+	return dropped
+
+
 def _log_violation(ctx: ReadOnlyContext):
 	"""Counts and the tool name only: never record data."""
 	summary = ctx.summary()
@@ -159,7 +187,8 @@ def _log_violation(ctx: ReadOnlyContext):
 			title="AST write blocked",
 			message=(
 				f"user={frappe.session.user} tool={summary['tool'] or '(unnamed)'} "
-				f"db_writes_rolled_back={summary['db_writes']} trap_refusals={summary['trap_hits']}"
+				f"db_writes_rolled_back={summary['db_writes']} trap_refusals={summary['trap_hits']} "
+					f"callbacks_dropped={summary['callbacks_dropped']}"
 			),
 		)
 	except Exception:
@@ -189,16 +218,20 @@ def _clean(value):
 	return neutralise(str(value))
 
 
+def _envelope(cleaned, source: str) -> str:
+	"""The one place an envelope string is built, so the size `_fit` measures is the size that is returned."""
+	if isinstance(cleaned, dict):
+		cleaned["source"] = source
+	return f'<data source="{source}">{json.dumps(cleaned, ensure_ascii=False)}</data>'
+
+
 def as_data(payload, source: str = SOURCE_LIVE) -> str:
 	"""One envelope around the whole result: `<data source="live_site">{json}</data>` (DECISIONS #38.3)."""
 	if source not in SOURCES:
 		raise frappe.ValidationError("Unknown data source.")
 	if isinstance(payload, str):
 		payload = {"text": payload}
-	cleaned = _clean(payload)
-	if isinstance(cleaned, dict):
-		cleaned["source"] = source
-	return f'<data source="{source}">{json.dumps(cleaned, ensure_ascii=False)}</data>'
+	return _envelope(_clean(payload), source)
 
 
 def unwrap(envelope: str) -> dict:
@@ -228,11 +261,12 @@ def _shorten(obj, limit: int):
 def _fit(result: dict, row_lists, field_dicts, source: str = SOURCE_LIVE):
 	"""Make the envelope fit MAX_CHARS and keep it valid JSON: shorten strings, drop trailing rows, drop fields.
 
-	`result` must already be cleaned (strings neutralised). Sets `truncated` when anything is removed.
+	`result` must already be cleaned (strings neutralised). Sets `truncated` when anything is removed. The cap
+	applies to the final envelope string, markers and `source` included.
 	"""
 
 	def size():
-		return len(f'<data source="{source}">{json.dumps(result, ensure_ascii=False)}</data>')
+		return len(_envelope(result, source))  # the real string, with "source" and the markers (M2b-R5)
 
 	if size() <= MAX_CHARS:
 		return
@@ -299,7 +333,7 @@ def readable_fields(doctype: str, parenttype: str | None = None) -> list[str]:
 
 
 def _message_log_size() -> int:
-	return len(getattr(frappe.local, "message_log", None) or [])
+	return len(frappe.local.message_log)  # always a list once frappe.init has run
 
 
 def load_readable(doctype, name):
@@ -327,8 +361,7 @@ def load_readable(doctype, name):
 	finally:
 		# get_doc's own "not found" message must not reach an HTTP response, or it would tell a missing
 		# record from a hidden one.
-		if getattr(frappe.local, "message_log", None) is not None:
-			del frappe.local.message_log[log_size:]
+		del frappe.local.message_log[log_size:]
 
 	allowed = bool(doc) and frappe.permissions.has_permission(doctype, "read", doc=doc, print_logs=False)
 	if not allowed:

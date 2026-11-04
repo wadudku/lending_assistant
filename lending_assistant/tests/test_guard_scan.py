@@ -70,7 +70,7 @@ EXPECTED_RULES = ("get-list", "db-read", "get-doc", "ignore-permissions", "user-
 
 class TestGuardScan(AssistantTestCase):
 	def make_tree(self, files):
-		root = self.make_tree(files)
+		root = tree(files)
 		self.addCleanup(shutil.rmtree, root, True)
 		return root
 

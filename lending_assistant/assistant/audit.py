@@ -6,13 +6,22 @@ Nothing here commits: the request commits.
 """
 
 import json
+import re
 
 import frappe
-from frappe.utils import now_datetime
+from frappe.utils import now_datetime, strip_html_tags
 
 CONVERSATION = "Assistant Conversation"
 MESSAGE = "Assistant Message"
 TITLE_LENGTH = 100
+
+
+def make_title(question: str | None) -> str:
+	"""Display label for a conversation (DECISIONS #36a): the first TITLE_LENGTH characters of the question,
+	with HTML tags removed and whitespace collapsed. Never the verbatim text: Desk shows titles in lists and
+	form headers, so the title must not carry markup. The verbatim question lives in Assistant Message.question."""
+	text = re.sub(r"\s+", " ", strip_html_tags(question or "")).strip()
+	return text[:TITLE_LENGTH] or "(no text)"
 
 
 def _json(value):
@@ -23,7 +32,7 @@ def start_conversation(route: str | None = None, title: str | None = None) -> st
 	"""Create a conversation for the session user and return its name."""
 	conversation = frappe.new_doc(CONVERSATION)
 	conversation.user = frappe.session.user
-	conversation.title = (title or "").strip()[:TITLE_LENGTH]
+	conversation.title = make_title(title)
 	conversation.first_route = route or ""
 	conversation.last_activity = now_datetime()
 	conversation.message_count = 0

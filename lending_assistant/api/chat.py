@@ -8,9 +8,8 @@ import time
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
 
-from lending_assistant.assistant import audit
+from lending_assistant.assistant import audit, ratelimit
 from lending_assistant.assistant.settings import get_settings
 
 ASSISTANT_USER = "Assistant User"
@@ -25,27 +24,28 @@ DEPTHS = ("Business", "Technical", "Both")
 FEEDBACK_VALUES = ("up", "down")
 DEFAULT_LIMIT = 30
 DEFAULT_WINDOW = 3600
+IP_LIMIT = 120  # ask, per client IP per IP_WINDOW. Module constants on purpose (DECISIONS #36); tests patch them
+IP_WINDOW = 3600
+FEEDBACK_LIMIT = 60  # feedback, per user per window (own bucket, DECISIONS #28)
 
 
 @frappe.whitelist(methods=["POST"])
-@rate_limit(limit=120, seconds=3600, methods=["POST"])  # outer, IP-based layer (DECISIONS #11)
-def ask(question, conversation=None, route=None, depth="Both", deep=0):
+def ask(question=None, conversation=None, route=None, depth="Both", deep=0):
+	"""Gate order (G7, DECISIONS #27): login (Frappe) -> role -> enabled -> per-user limit -> IP limit
+	-> validation -> ownership. Arguments default to None so a missing one is a validation error, not a 500."""
 	started = time.monotonic()
 
 	_require_assistant_user()
-
-	settings = get_settings()
-	if not settings.enabled:
-		frappe.throw(_("The assistant is turned off."), frappe.PermissionError)
-
+	settings = _require_enabled()
 	_check_user_rate_limit(settings)
+	_check_ip_rate_limit()
 
 	question, route, depth, deep = _validate(question, route, depth, deep)
 
 	if conversation:
 		conversation = _own_record(audit.CONVERSATION, conversation)
 	else:
-		conversation = audit.start_conversation(route, title=question)
+		conversation = audit.start_conversation(route, title=question)  # title is a derived label, see audit.make_title
 
 	route_doctype, route_docname = _split_route(route)
 	message = audit.log_exchange(
@@ -66,12 +66,20 @@ def ask(question, conversation=None, route=None, depth="Both", deep=0):
 
 
 @frappe.whitelist(methods=["POST"])
-def feedback(message, value, comment=None):
+def feedback(message=None, value=None, comment=None):
+	"""Same gate as `ask` (DECISIONS #28): role -> enabled -> per-user limit (own bucket) -> validation -> ownership."""
 	_require_assistant_user()
+	settings = _require_enabled()
+	window = int(settings.rate_limit_window_seconds or 0) or DEFAULT_WINDOW
+	_too_many(ratelimit.exceeded(ratelimit.FEEDBACK_PREFIX, frappe.session.user, FEEDBACK_LIMIT, window))
 
+	if not message or not isinstance(message, str):
+		frappe.throw(_("Please say which message the feedback is for."))
 	if value not in FEEDBACK_VALUES:
 		frappe.throw(_("Feedback must be 'up' or 'down'."))
-	comment = (comment or "").strip()
+	if comment is not None and not isinstance(comment, str):
+		frappe.throw(_("The comment must be text."))
+	comment = comment or ""  # stored exactly as received (DECISIONS #24); only the length is checked
 	if len(comment) > MAX_COMMENT:
 		frappe.throw(_("The comment is too long (maximum {0} characters).").format(MAX_COMMENT))
 
@@ -88,30 +96,39 @@ def _require_assistant_user():
 		frappe.throw(_("You need the {0} role to use the assistant.").format(ASSISTANT_USER), frappe.PermissionError)
 
 
-def _rate_key(user: str, window: int) -> str:
-	return frappe.cache.make_key(f"ast:rl:{user}:{window}")
+def _require_enabled():
+	settings = get_settings()
+	if not settings.enabled:
+		frappe.throw(_("The assistant is turned off."), frappe.PermissionError)
+	return settings
 
 
-def _check_user_rate_limit(settings) -> None:
-	"""Per-user counter (DECISIONS #11). The stock `rate_limit` keys on IP, never on the user."""
-	limit = int(settings.rate_limit_per_user or 0) or DEFAULT_LIMIT
-	window = int(settings.rate_limit_window_seconds or 0) or DEFAULT_WINDOW
-	key = _rate_key(frappe.session.user, window)
-
-	if not frappe.cache.get(key):
-		frappe.cache.setex(key, window, 0)
-	if frappe.cache.incrby(key, 1) > limit:
+def _too_many(over: bool) -> None:
+	if over:
 		frappe.throw(
 			_("You have asked too many questions for now. Please try again later."),
 			frappe.RateLimitExceededError,
 		)
 
 
+def _check_user_rate_limit(settings) -> None:
+	"""Per-user counter (DECISIONS #11). Atomic, see ratelimit.py."""
+	limit = int(settings.rate_limit_per_user or 0) or DEFAULT_LIMIT
+	window = int(settings.rate_limit_window_seconds or 0) or DEFAULT_WINDOW
+	_too_many(ratelimit.exceeded(ratelimit.USER_PREFIX, frappe.session.user, limit, window))
+
+
+def _check_ip_rate_limit() -> None:
+	"""IP layer (DECISIONS #27). Runs after the role check, so users without the role can't use up the quota."""
+	ip = getattr(frappe.local, "request_ip", None) or "unknown"
+	_too_many(ratelimit.exceeded(ratelimit.IP_PREFIX, ip, IP_LIMIT, IP_WINDOW))
+
+
 def _validate(question, route, depth, deep):
 	if not isinstance(question, str) or not question.strip():
 		frappe.throw(_("Please type a question."))
-	question = question.strip()
-	if len(question) > MAX_QUESTION:
+	# The question is stored exactly as received (DECISIONS #24, #36d); the stripped copy is for the length check only.
+	if len(question.strip()) > MAX_QUESTION or len(question) > MAX_QUESTION * 2:
 		frappe.throw(_("The question is too long (maximum {0} characters).").format(MAX_QUESTION))
 
 	route = route if route is not None else ""

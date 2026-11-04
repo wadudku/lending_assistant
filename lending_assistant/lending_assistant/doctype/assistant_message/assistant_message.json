@@ -100,7 +100,7 @@
 		},
 		{
 			"fieldname": "route",
-			"fieldtype": "Small Text",
+			"fieldtype": "Code",
 			"label": "Route",
 			"read_only": 1
 		},
@@ -111,14 +111,13 @@
 		},
 		{
 			"fieldname": "question",
-			"fieldtype": "Long Text",
+			"fieldtype": "Code",
 			"label": "Question",
-			"read_only": 1,
-			"in_list_view": 1
+			"read_only": 1
 		},
 		{
 			"fieldname": "answer",
-			"fieldtype": "Long Text",
+			"fieldtype": "Code",
 			"label": "Answer",
 			"read_only": 1
 		},
@@ -129,9 +128,10 @@
 		},
 		{
 			"fieldname": "roles",
-			"fieldtype": "JSON",
+			"fieldtype": "Code",
 			"label": "Roles (snapshot)",
-			"read_only": 1
+			"read_only": 1,
+			"options": "JSON"
 		},
 		{
 			"fieldname": "tokens_in",
@@ -163,33 +163,38 @@
 		},
 		{
 			"fieldname": "tool_calls",
-			"fieldtype": "JSON",
+			"fieldtype": "Code",
 			"label": "Tool calls",
-			"read_only": 1
+			"read_only": 1,
+			"options": "JSON"
 		},
 		{
 			"fieldname": "records_read",
-			"fieldtype": "JSON",
+			"fieldtype": "Code",
 			"label": "Records read",
-			"read_only": 1
+			"read_only": 1,
+			"options": "JSON"
 		},
 		{
 			"fieldname": "code_files_read",
-			"fieldtype": "JSON",
+			"fieldtype": "Code",
 			"label": "Code files read",
-			"read_only": 1
+			"read_only": 1,
+			"options": "JSON"
 		},
 		{
 			"fieldname": "cards_used",
-			"fieldtype": "JSON",
+			"fieldtype": "Code",
 			"label": "Cards used",
-			"read_only": 1
+			"read_only": 1,
+			"options": "JSON"
 		},
 		{
 			"fieldname": "web_sources",
-			"fieldtype": "JSON",
+			"fieldtype": "Code",
 			"label": "Web sources",
-			"read_only": 1
+			"read_only": 1,
+			"options": "JSON"
 		},
 		{
 			"fieldname": "feedback_section",
@@ -205,7 +210,7 @@
 		},
 		{
 			"fieldname": "feedback_comment",
-			"fieldtype": "Small Text",
+			"fieldtype": "Code",
 			"label": "Feedback comment",
 			"read_only": 1
 		}

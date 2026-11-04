@@ -30,7 +30,7 @@
 		},
 		{
 			"fieldname": "first_route",
-			"fieldtype": "Small Text",
+			"fieldtype": "Code",
 			"label": "First route",
 			"read_only": 1
 		},

@@ -120,7 +120,10 @@ def _check_user_rate_limit(settings) -> None:
 
 def _check_ip_rate_limit() -> None:
 	"""IP layer (DECISIONS #27). Runs after the role check, so users without the role can't use up the quota."""
-	ip = getattr(frappe.local, "request_ip", None) or "unknown"
+	try:
+		ip = frappe.local.request_ip or "unknown"
+	except AttributeError:  # no request (a test or a background call)
+		ip = "unknown"
 	_too_many(ratelimit.exceeded(ratelimit.IP_PREFIX, ip, IP_LIMIT, IP_WINDOW))
 
 

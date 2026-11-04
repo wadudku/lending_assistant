@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Guardrail scanner (WORKER.md guardrail table, PLAN §2, DECISIONS #35).
+"""Guardrail scanner (WORKER.md guardrail table, PLAN §2, DECISIONS #35, #40, #41).
 
 Scans `lending_assistant/` (not `tests/`) and exits 1 on any banned pattern that is not on a line marked
 `# AST-ALLOWED: <reason>` inside a file that is allowed to use that kind of API. Run it with the bench Python:
 
     python scripts/guard_scan.py [--root DIR]      # DIR holds the `lending_assistant/` package; default: this repo
 
-The scan is syntactic (Python `ast`, plus line patterns for JavaScript). It is a net for mistakes and for a
-careless model-written patch, not a proof: the savepoint rollback and the Reviewer's greps are separate layers.
+The scan is syntactic (Python `ast`, plus line patterns for JavaScript). It resolves `from x import y [as z]`,
+`import x as z` and `d = frappe.db` style aliases before it looks at a name, and it DENIES `frappe.db.*` by
+default: only the transaction lines the guard marks are on the allowlist. It is a net for mistakes and for a
+careless model-written patch, not a proof. What it cannot see is listed in the M2b report ("known limits");
+the savepoint rollback, the write trap and the Reviewer's greps are separate layers.
 """
 
 import argparse
@@ -28,7 +31,14 @@ ALLOWED = {
 	"get-list": ("assistant/guard.py", "api/chat.py"),
 	"db-read": ("install.py",),
 	"txn-control": ("assistant/guard.py",),
+	"callbacks": ("assistant/guard.py",),  # frappe.db.before/after_commit/rollback and their _functions
+	"alias": ("assistant/guard.py",),  # frappe.db / qb / local / session bound to a name or passed on
 	"file-access": ("assistant/codereader.py",),
+	"db-other": (),  # any frappe.db.<attr> that is not read, write or one of the transaction lines
+	"qb": (),
+	"client-api": (),  # frappe.client.* / frappe.desk.*: whole documents, no never-send or Password filter (G3)
+	"side-effect": (),  # enqueue, sendmail, realtime
+	"dynamic": (),  # getattr / setattr / delattr / globals / vars / attrgetter
 	"user-switch": (),
 	"generic-exec": (),
 	"whitelist": (),
@@ -45,17 +55,40 @@ WRITES = {
 	"insert", "save", "submit", "cancel", "delete", "delete_doc", "rename_doc", "set_value", "db_insert",
 	"db_update", "db_set", "truncate", "bulk_insert", "set_single_value", "update", "run_method",
 }  # fmt: skip
-TXN = {"commit", "rollback", "savepoint", "release_savepoint", "begin"}
+# The ONLY frappe.db attributes tool code may touch, and only on lines the guard marks (DECISIONS #35, #41).
+DB_TXN_ALLOWED = {"savepoint", "rollback", "release_savepoint", "_disable_transaction_control", "transaction_writes"}
+DB_CALLBACKS = {"before_commit", "after_commit", "before_rollback", "after_rollback"}
 TXN_ATTRS = {"_disable_transaction_control", "transaction_writes"}
 FILE_CALLS = {"open", "read_text", "read_bytes", "write_text", "write_bytes", "walk", "listdir", "scandir", "glob", "rglob", "iterdir", "copyfile", "rmtree"}  # fmt: skip
 EXEC_NAMES = {"eval", "exec", "compile", "__import__"}
-EXEC_DOTTED = {"os.system", "os.popen", "frappe.call", "frappe.get_attr", "frappe.get_method", "frappe.enqueue", "frappe.utils.safe_exec.safe_eval"}  # fmt: skip
+DYNAMIC_NAMES = {"getattr", "setattr", "delattr", "globals", "vars"}
+EXEC_DOTTED = {
+	"os.system", "os.popen", "frappe.call", "frappe.get_attr", "frappe.get_method", "operator.attrgetter",
+	"operator.methodcaller", "sys.modules",
+}  # fmt: skip
+DYNAMIC_DOTTED = {"operator.attrgetter", "operator.methodcaller", "sys.modules"}
+EXEC_PREFIXES = ("subprocess", "importlib", "frappe.utils.safe_exec")
+SIDE_EFFECT_DOTTED = {
+	"frappe.sendmail", "frappe.enqueue", "frappe.enqueue_doc", "frappe.publish_realtime", "frappe.publish_progress",
+}  # fmt: skip
+SIDE_EFFECT_PREFIXES = ("frappe.utils.background_jobs", "frappe.email.queue")
+CLIENT_API_PREFIXES = ("frappe.client", "frappe.desk", "frappe.model.db_query")
+SIDE_EFFECT_METHODS = {"enqueue", "enqueue_doc", "queue_action", "sendmail", "publish_realtime", "publish_progress"}
+# Names that must never be bound to a variable or passed on as a value: the alias would hide later calls.
+BARE_ALIAS = {"frappe.db", "frappe.qb", "frappe.local", "frappe.session"}
+TRACK_ALIAS = BARE_ALIAS | {"frappe.flags", "frappe.local.session", "frappe.local.flags"}
+# Writing to any of these changes who the session is (G2) or switches permission checks off.
+PROTECTED = (
+	"frappe.session", "frappe.local.session", "frappe.local.user",
+	"frappe.flags.ignore_permissions", "frappe.local.flags.ignore_permissions",
+)  # fmt: skip
+MUTATORS = {"update", "setdefault", "pop", "popitem", "clear", "__setitem__", "__delitem__"}
 JS_HTML = re.compile(r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write|\.html\(|\$\(\s*[`'\"]\s*<")
 WHITELIST_OK = {("api/chat.py", "ask"), ("api/chat.py", "feedback"), ("api/findings.py", "save")}
 
 
 def dotted(node) -> str:
-	"""`a.b.c` for Name / Attribute chains; `?` for anything else in the chain."""
+	"""`a.b.c` for Name / Attribute chains; `?` for anything else at the root of the chain."""
 	parts = []
 	while isinstance(node, ast.Attribute):
 		parts.append(node.attr)
@@ -64,15 +97,122 @@ def dotted(node) -> str:
 	return ".".join(reversed(parts))
 
 
+def under(full: str, prefix: str) -> bool:
+	return full == prefix or full.startswith(prefix + ".")
+
+
+def classify(full: str, call: bool):
+	"""(rule, message) when the resolved dotted name is banned, else None."""
+	if under(full, "frappe.local.db"):  # frappe.db is a proxy for frappe.local.db
+		full = "frappe.db" + full[len("frappe.local.db"):]
+	shown = full + ("()" if call else "")
+	parts = full.split(".")
+	last = parts[-1]
+	if any(under(full, p) for p in CLIENT_API_PREFIXES):
+		return "client-api", f"{shown}: returns whole documents; use guard.read_doc / guard.list_records (G3)"
+	if under(full, "frappe.qb"):
+		return "qb", f"{shown}: frappe.qb has no permission check"
+	if parts[:2] == ["frappe", "db"]:
+		if len(parts) == 2:
+			return "alias", "frappe.db bound to a name or passed as a value"
+		attr = parts[2]
+		if attr in DB_CALLBACKS:
+			return "callbacks", f"{shown}: commit/rollback callbacks"
+		if attr in DB_TXN_ALLOWED:
+			return "txn-control", shown
+		if attr in DB_READS:
+			return ("get-list" if attr == "get_list" else "db-read"), shown
+		if attr in WRITES:
+			return "write", shown
+		return "db-other", f"{shown}: frappe.db.{attr} is not on the allowlist (DDL, defaults, commit and the rest)"
+	if full in ("frappe.get_value", "frappe.get_single_value", "frappe.get_all"):
+		return "db-read", shown
+	if full == "frappe.get_list":
+		return "get-list", f"{shown} outside guard.py"
+	if parts[0] == "frappe" and len(parts) == 2 and last in GET_DOCS:
+		return "get-doc", shown
+	if full == "frappe.set_user":
+		return "user-switch", shown
+	if full in SIDE_EFFECT_DOTTED or any(under(full, p) for p in SIDE_EFFECT_PREFIXES):
+		return "side-effect", f"{shown}: queues work or sends something the rollback cannot undo"
+	if full in DYNAMIC_DOTTED:
+		return "dynamic", shown
+	if full in EXEC_DOTTED or any(under(full, p) for p in EXEC_PREFIXES):
+		return "generic-exec", shown
+	if full in BARE_ALIAS:
+		return "alias", f"{full} bound to a name or passed as a value"
+	if parts[0] == "frappe" and len(parts) == 2 and last in WRITES and last not in ("update", "run_method"):
+		return "write", shown
+	return None
+
+
 class Scanner(ast.NodeVisitor):
 	def __init__(self, rel: str, lines: list[str]):
 		self.rel = rel
 		self.lines = lines
 		self.hits: list[tuple[int, str, str]] = []  # (line, rule, message)
 		self.skip: set[int] = set()  # decorator nodes that are an allowed whitelist
+		self.aliases: dict[str, str] = {}  # local name -> dotted origin (imports and `d = frappe.db`)
+		self.handled: set[int] = set()  # Attribute / Name nodes already judged as part of a longer chain
 
 	def hit(self, node, rule: str, message: str):
 		self.hits.append((node.lineno, rule, message))
+
+	# --- helpers
+
+	def resolve(self, node) -> str:
+		"""Dotted name with the root replaced by what it was imported or assigned from."""
+		name = dotted(node)
+		root, _, rest = name.partition(".")
+		origin = self.aliases.get(root)
+		if origin and origin != root:
+			return origin + ("." + rest if rest else "")
+		return name
+
+	def mark_chain(self, node):
+		"""Mark every Attribute / Name in a chain as judged, so the parts are not judged again alone."""
+		while isinstance(node, ast.Attribute):
+			self.handled.add(id(node))
+			node = node.value
+		if isinstance(node, ast.Name):
+			self.handled.add(id(node))
+
+	def judge_import(self, node, full: str):
+		found = classify(full, False)
+		if found is None and any(under(full, p) for p in EXEC_PREFIXES):
+			found = ("generic-exec", full)
+		if found:
+			self.hit(node, found[0], f"import of {full}: {found[1]}")
+
+	def identity_target(self, target, node):
+		"""A write to the session identity or to the permission flags, in any assignment shape."""
+		if isinstance(target, ast.Tuple | ast.List):
+			for item in target.elts:
+				self.identity_target(item, node)
+			return
+		if isinstance(target, ast.Starred):
+			self.identity_target(target.value, node)
+			return
+		key = None
+		while isinstance(target, ast.Subscript):
+			key = target.slice
+			target = target.value
+		if not isinstance(target, ast.Attribute | ast.Name):
+			return
+		full = self.resolve(target)
+		if full == "frappe.local" or any(under(full, p) for p in PROTECTED):
+			self.hit(node, "user-switch", f"write to {full}")
+		elif full in ("frappe.flags", "frappe.local.flags") and isinstance(key, ast.Constant):
+			if isinstance(key.value, str) and key.value.startswith("ignore_"):
+				self.hit(node, "user-switch", f"write to {full}[{key.value!r}]")
+
+	def remember_alias(self, target, value):
+		"""`d = frappe.db` -> later `d.sql()` is judged as `frappe.db.sql()`."""
+		if not isinstance(target, ast.Name) or not isinstance(value, ast.Attribute | ast.Name):
+			return
+		full = self.resolve(value)
+		if full in TRACK_ALIAS or classify(full, False):
+			self.aliases[target.id] = full
 
 	# --- visitors
 
@@ -87,25 +227,69 @@ class Scanner(ast.NodeVisitor):
 
 	visit_AsyncFunctionDef = visit_FunctionDef
 
+	def visit_Import(self, node):
+		for item in node.names:
+			self.judge_import(node, item.name)
+			if item.asname:
+				self.aliases[item.asname] = item.name
+
+	def visit_ImportFrom(self, node):
+		module = node.module or ""
+		if node.level:  # relative import: inside the app, nothing to judge
+			return
+		for item in node.names:
+			if item.name == "*":
+				if module == "frappe" or module.startswith("frappe."):
+					self.hit(node, "alias", f"star import from {module}")
+				continue
+			full = f"{module}.{item.name}"
+			self.judge_import(node, full)
+			self.aliases[item.asname or item.name] = full
+
 	def visit_Attribute(self, node):
 		name = dotted(node)
 		if node.attr in ("ignore_permissions", "ignore_user_permissions"):
 			self.hit(node, "ignore-permissions", f"{name}")
 		elif node.attr in TXN_ATTRS:
 			self.hit(node, "txn-control", f"{name}")
+		elif node.attr == "_functions":
+			self.hit(node, "callbacks", f"{name}: private callback queue")
 		elif node.attr == "whitelist" and id(node) not in self.skip:
 			self.hit(node, "whitelist", "@frappe.whitelist outside api/chat.py (ask, feedback) and api/findings.py (save)")
+		if id(node) not in self.handled:
+			self.mark_chain(node)
+			found = classify(self.resolve(node), False)
+			if found:
+				self.hit(node, *found)
 		self.generic_visit(node)
 
 	def visit_Name(self, node):
 		if node.id == "whitelist" and id(node) not in self.skip:
 			self.hit(node, "whitelist", "whitelist outside the allowed endpoints")
+		elif id(node) not in self.handled and node.id in self.aliases and isinstance(node.ctx, ast.Load):
+			found = classify(self.resolve(node), False)
+			if found:
+				self.hit(node, *found)
 
 	def visit_Assign(self, node):
 		for target in node.targets:
-			name = dotted(target) if isinstance(target, ast.Attribute) else ""
-			if name.startswith(("frappe.session", "frappe.local.session", "frappe.local.user")):
-				self.hit(node, "user-switch", f"assignment to {name}")
+			self.identity_target(target, node)
+			self.remember_alias(target, node.value)
+		self.generic_visit(node)
+
+	def visit_AnnAssign(self, node):
+		self.identity_target(node.target, node)
+		if node.value is not None:
+			self.remember_alias(node.target, node.value)
+		self.generic_visit(node)
+
+	def visit_AugAssign(self, node):
+		self.identity_target(node.target, node)
+		self.generic_visit(node)
+
+	def visit_Delete(self, node):
+		for target in node.targets:
+			self.identity_target(target, node)
 		self.generic_visit(node)
 
 	def visit_keyword(self, node):
@@ -117,36 +301,36 @@ class Scanner(ast.NodeVisitor):
 
 	def visit_Call(self, node):
 		func = node.func
-		name = dotted(func)
+		raw = dotted(func)
+		name = self.resolve(func)
 		last = name.split(".")[-1]
-		in_db = ".db." in f".{name}." or name.startswith("db.")
 		in_cache = ".cache." in f".{name}." or name.startswith("cache.")
+		self.mark_chain(func)
+		found = classify(name, True)
 
-		if isinstance(func, ast.Name):
+		if found:
+			self.hit(node, *found)
+		elif isinstance(func, ast.Name) and name == raw:  # a builtin, not an imported or assigned name
 			if last in EXEC_NAMES:
 				self.hit(node, "generic-exec", f"{last}()")
+			elif last in DYNAMIC_NAMES:
+				self.hit(node, "dynamic", f"{last}(): dynamic attribute access hides what is being touched")
 			elif last == "open":
 				self.hit(node, "file-access", "open()")
-		elif name in EXEC_DOTTED or name.startswith("subprocess."):
-			self.hit(node, "generic-exec", f"{name}()")
-		elif name == "frappe.set_user":
-			self.hit(node, "user-switch", "frappe.set_user()")
-		elif in_db and last in DB_READS:
-			self.hit(node, "get-list" if last == "get_list" else "db-read", f"{name}()")
+		elif in_cache:
+			pass
+		elif isinstance(func, ast.Attribute) and last in MUTATORS and any(under(name.rsplit(".", 1)[0], p) for p in PROTECTED):
+			self.hit(node, "user-switch", f"{name}()")
+		elif last in SIDE_EFFECT_METHODS:
+			self.hit(node, "side-effect", f"{name}(): queues work or sends something the rollback cannot undo")
 		elif last == "get_all":
 			self.hit(node, "db-read", f"{name}()")
 		elif last == "get_list" and name.startswith("frappe."):
 			self.hit(node, "get-list", f"{name}() outside guard.py")
-		elif name.startswith("frappe.") and last in GET_DOCS:
-			self.hit(node, "get-doc", f"{name}()")
-		elif in_db and last in TXN:
-			self.hit(node, "txn-control", f"{name}()")
-		elif in_cache:
-			pass
 		elif last in FILE_CALLS:
 			self.hit(node, "file-access", f"{name}()")
 		elif last in WRITES and isinstance(func, ast.Attribute):
-			if last == "update" and not in_db:
+			if last == "update":
 				pass  # dict.update / doc.update(values) is not a DB write
 			elif last == "run_method" and not name.startswith("frappe."):
 				pass
@@ -181,8 +365,7 @@ def scan_python(rel: str, source: str):
 		return [(exc.lineno or 1, "syntax", f"cannot parse: {exc.msg}")]
 	scanner = Scanner(rel, lines)
 	scanner.visit(tree)
-	hits = [h for h in scanner.hits]
-	return check_markers(rel, lines, hits)
+	return check_markers(rel, lines, scanner.hits)
 
 
 def scan_js(rel: str, source: str):

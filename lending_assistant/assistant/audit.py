@@ -30,7 +30,7 @@ def _json(value):
 
 def start_conversation(route: str | None = None, title: str | None = None) -> str:
 	"""Create a conversation for the session user and return its name."""
-	conversation = frappe.new_doc(CONVERSATION)
+	conversation = frappe.new_doc(CONVERSATION)  # AST-ALLOWED: app's own audit log
 	conversation.user = frappe.session.user
 	conversation.title = make_title(title)
 	conversation.first_route = route or ""
@@ -63,7 +63,7 @@ def log_exchange(
 	web_sources: list | None = None,
 ) -> str:
 	"""Write one Assistant Message (one exchange) and update its conversation. Returns the message name."""
-	message = frappe.new_doc(MESSAGE)
+	message = frappe.new_doc(MESSAGE)  # AST-ALLOWED: app's own audit log
 	message.update(
 		{
 			"conversation": conversation,

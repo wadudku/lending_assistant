@@ -144,13 +144,21 @@ after_install = "lending_assistant.install.after_install"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+# G1 layer 2: the write trap. Every hook below does nothing unless a tool is running inside
+# guard.read_only_tool_context(); then it raises PermissionError("The assistant can only read.").
+_TRAP = "lending_assistant.assistant.guard.block_if_read_only"
+doc_events = {
+	"*": {
+		"before_insert": _TRAP,
+		"before_validate": _TRAP,
+		"before_save": _TRAP,
+		"on_update": _TRAP,
+		"before_submit": _TRAP,
+		"before_cancel": _TRAP,
+		"on_trash": _TRAP,
+		"before_rename": _TRAP,
+	}
+}
 
 # Scheduled Tasks
 # ---------------

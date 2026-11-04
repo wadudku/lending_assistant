@@ -58,7 +58,7 @@ NEW_MAX_TOKENS = 16000  # DECISIONS #32
 
 
 def _doctype_exists(name: str) -> bool:
-	return bool(frappe.db.exists("DocType", name))
+	return bool(frappe.db.exists("DocType", name))  # AST-ALLOWED: install seed, meta check
 
 
 def _field_exists(doctype: str, fieldname: str) -> bool:

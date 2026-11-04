@@ -12,7 +12,7 @@ SETTINGS_DOCTYPE = "Assistant Settings"
 
 def get_settings():
 	"""Cached read of the Assistant Settings single."""
-	return frappe.get_cached_doc(SETTINGS_DOCTYPE)
+	return frappe.get_cached_doc(SETTINGS_DOCTYPE)  # AST-ALLOWED: app config, the one settings reader (DECISIONS #17)
 
 
 def get_api_key() -> str | None:

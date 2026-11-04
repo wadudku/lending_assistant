@@ -156,7 +156,7 @@ def _own_record(doctype: str, name) -> str:
 	"""
 	rows = []
 	if isinstance(name, str) and name:
-		rows = frappe.get_list(
+		rows = frappe.get_list(  # AST-ALLOWED: own-conversation ownership check, runs as the session user
 			doctype,
 			filters={"name": name, "user": frappe.session.user},
 			pluck="name",

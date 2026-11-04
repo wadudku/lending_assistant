@@ -1,5 +1,6 @@
 """The scanner (scripts/guard_scan.py) is clean on the app and fails on bad code."""
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -68,13 +69,18 @@ EXPECTED_RULES = ("get-list", "db-read", "get-doc", "ignore-permissions", "user-
 
 
 class TestGuardScan(AssistantTestCase):
+	def make_tree(self, files):
+		root = self.make_tree(files)
+		self.addCleanup(shutil.rmtree, root, True)
+		return root
+
 	def test_app_is_clean(self):
 		result = run()
 		self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 		self.assertIn("clean", result.stdout)
 
 	def test_bad_tree_fails_for_every_rule(self):
-		root = tree(
+		root = self.make_tree(
 			{
 				"assistant/tools/bad.py": BAD_TOOL,
 				"api/other.py": """
@@ -130,7 +136,7 @@ class TestGuardScan(AssistantTestCase):
 		self.assertIn("not permitted in public/js/w.js", out)
 
 	def test_marked_lines_in_allowed_files_pass(self):
-		root = tree(
+		root = self.make_tree(
 			{
 				"assistant/audit.py": "import frappe\n\ndef f(doc):\n    doc.insert(ignore_permissions=True)  # AST-ALLOWED: own log\n",
 				"install.py": 'import frappe\n\ndef f(n):\n    return frappe.db.exists("DocType", n)  # AST-ALLOWED: install seed, meta check\n',
@@ -142,4 +148,6 @@ class TestGuardScan(AssistantTestCase):
 		self.assertEqual(result.returncode, 0, result.stdout)
 
 	def test_missing_package_is_an_error(self):
-		self.assertEqual(run("--root", tempfile.mkdtemp()).returncode, 2)
+		empty = tempfile.mkdtemp(prefix="ast_scan_")
+		self.addCleanup(shutil.rmtree, empty, True)
+		self.assertEqual(run("--root", empty).returncode, 2)

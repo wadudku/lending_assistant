@@ -7,6 +7,7 @@ back at the end of the class by IntegrationTestCase, so nothing here may call fr
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils import now_datetime
 
 from lending_assistant.assistant import ratelimit
 
@@ -98,8 +99,15 @@ class AssistantTestCase(IntegrationTestCase):
 		return len(frappe.get_all(doctype, filters=filters, pluck="name", limit_page_length=0))
 
 
+TEST_TOOL_PREFIX = "AST-TEST-"  # every tool name a test gives the read-only context starts with this
+
+
 class GuardTestCase(AssistantTestCase):
 	"""For the M2b guard tests: Live data and Code reader on, and the Settings tables put back afterwards.
+
+	`Error Log` is a MyISAM table, so the test rollback never removes the "AST write blocked" rows that a
+	provoked violation logs (M2b-R2). Tests name their tools `AST-TEST-...` and tearDown deletes the rows they
+	made. Production rows (other tool names) are never touched.
 
 	Settings is cached in Redis and Redis is not rolled back, so any change to a table has to be undone by
 	saving again, not just by the class-level rollback.
@@ -113,9 +121,21 @@ class GuardTestCase(AssistantTestCase):
 		self._tables = {t: [row.as_dict(no_nulls=True) for row in settings.get(t)] for t in self.TABLES}
 		self.configure(live_data=1, code_reader=1)
 		self._property_setters = []
+		self._started = now_datetime()
+
+	def remove_violation_logs(self):
+		frappe.set_user("Administrator")
+		frappe.db.delete(
+			"Error Log",
+			{
+				"method": "AST write blocked",
+				"error": ["like", f"%tool={TEST_TOOL_PREFIX}%"],
+				"creation": [">=", self._started],
+			},
+		)
 
 	def tearDown(self):
-		frappe.set_user("Administrator")
+		self.remove_violation_logs()
 		for name, doctype in self._property_setters:
 			frappe.db.delete("Property Setter", {"name": name})
 			frappe.clear_cache(doctype=doctype)

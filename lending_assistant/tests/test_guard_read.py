@@ -281,6 +281,29 @@ class TestEnvelope(GuardTestCase):
 		self.assertLessEqual(len(many), guard.MAX_CHARS)
 		self.assertTrue(unwrap(many)["truncated"])
 
+	def test_envelope_never_exceeds_the_cap_at_any_size_near_it(self):
+		"""M2b-R5: the cap is on the final string. The old code measured before adding `source` (up to 23 over)."""
+		name = self.make_customer()
+		frappe.set_user("Administrator")
+		builders = {
+			"list_records": lambda: guard.list_records("Customer", fields=["name", "customer_details"], filters={"name": name}),
+			"read_doc": lambda: guard.read_doc("Customer", name),
+		}
+		for label, build in builders.items():
+			frappe.db.set_value("Customer", name, "customer_details", "x")
+			overhead = len(build()) - 1  # everything that is not the long value
+			sizes = range(guard.MAX_CHARS - overhead - 40, guard.MAX_CHARS - overhead + 60)
+			near_cap = 0
+			for size in sizes:
+				frappe.db.set_value("Customer", name, "customer_details", "x" * size)
+				envelope = build()
+				self.assertLessEqual(len(envelope), guard.MAX_CHARS, f"{label} size {size}")
+				parsed = unwrap(envelope)  # still valid JSON inside the markers
+				self.assertEqual(parsed["source"], "live_site")
+				self.assertTrue(envelope.startswith('<data source="live_site">') and envelope.endswith("</data>"))
+				near_cap += len(envelope) >= guard.MAX_CHARS - 40
+			self.assertGreater(near_cap, 10, f"{label}: the range never reached the cap, so it proved nothing")
+
 	def test_child_rows_are_cut_before_the_record_is_dropped(self):
 		frappe.set_user("Administrator")
 		name = frappe.get_all("Loan Repayment Schedule", pluck="name", limit=1)[0]

@@ -106,7 +106,7 @@ SCOPES = {
 	# get_meta (rule not-allowed) is accepted only inside validate._meta_of. lookup, search, retrieve and
 	# assistant/tools/knowledge.py have no allowance at all (see KB_FILES / ALLOWED).
 	"kb/store.py": {"file-access": ("_read_text",)},
-	"kb/ingest.py": {"file-access": ("_read_bytes", "_write_bytes", "_list_dir")},
+	"kb/ingest.py": {"file-access": ("_read_bytes", "_write_bytes", "_list_dir", "_make_dirs", "_remove_file")},
 	"kb/validate.py": {"file-access": ("_read_text",), "not-allowed": ("_meta_of",)},
 }
 
@@ -291,6 +291,12 @@ DB_TXN_ALLOWED = {
 DB_CALLBACKS = {"before_commit", "after_commit", "before_rollback", "after_rollback"}
 TXN_ATTRS = {"_disable_transaction_control", "transaction_writes", "_conn", "_cursor"}
 FILE_CALLS = {"open", "read_text", "read_bytes", "write_text", "write_bytes", "walk", "listdir", "scandir", "glob", "rglob", "iterdir", "copyfile", "rmtree"}  # fmt: skip
+# M3b-R2: calls that change files. The first group is matched on any receiver; the second group has names that other
+# types also use (str.replace, list.remove, dict.copy), so it is matched only on an `os` / `shutil` / `pathlib`
+# receiver (a module, or `Path(...)`), or, for `replace`, a one-argument call (str.replace takes two).
+FILE_MUTATORS = {"unlink", "rename", "makedirs", "mkdir", "rmdir", "removedirs", "copy2", "copytree", "chmod", "symlink", "truncate"}  # fmt: skip
+FILE_MUTATORS_AMBIGUOUS = {"remove", "replace", "copy", "move", "link"}
+FILE_MODULES = ("os", "shutil", "pathlib")
 EXEC_NAMES = {"eval", "exec", "compile", "__import__"}
 DYNAMIC_NAMES = {"getattr", "setattr", "delattr", "globals", "vars"}
 EXEC_DOTTED = {
@@ -823,8 +829,21 @@ class Scanner(ast.NodeVisitor):
 				self.hit(node, "user-switch", f"{name}()")
 			if dotted(func.value).split(".")[-1] == "flags":
 				self.hit(node, "flags", f"{name}() changes a flags dict")
-		if method in FILE_CALLS:
+		if method in FILE_CALLS or method in FILE_MUTATORS:
 			self.hit(node, "file-access", f"{name}()")
+		elif method in FILE_MUTATORS_AMBIGUOUS and self.file_receiver(node, func):
+			self.hit(node, "file-access", f"{name}()")
+
+	def file_receiver(self, node, func) -> bool:
+		"""`os.remove`, `shutil.copy`, `pathlib.Path(p).replace`, `Path(p).unlink`: the receiver is a file module or a
+		Path object built in place. `replace` with one argument is a Path call too (str.replace takes two)."""
+		receiver = func.value
+		if isinstance(receiver, ast.Call):
+			receiver = receiver.func  # Path(p).replace(...): judge Path
+		base = self.resolve(receiver)
+		if base.split(".")[0] in FILE_MODULES or base.split(".")[-1] in ("Path", "PurePath", "PosixPath", "WindowsPath"):
+			return True
+		return func.attr == "replace" and len(node.args) == 1 and not node.keywords
 
 
 def allowed_here(rel: str, rule: str, files=None) -> bool:

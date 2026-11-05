@@ -25,11 +25,23 @@
 		return row.author_name || frappe.user.full_name(row.owner) || "";
 	}
 
+	// Free text goes in a fenced code block whose fence is longer than any run of ` or ~ in it, so nothing in it can be
+	// rendered as Markdown or HTML by a viewer, and it cannot close the fence (M6-R5).
+	function fenced(text) {
+		const body = String(text || "").replace(/\r\n?/g, "\n");
+		const runs = body.match(/`+|~+/g) || [];
+		const fence = "`".repeat(Math.max(3, ...runs.map((run) => run.length + 1)));
+		return fence + "\n" + body + "\n" + fence;
+	}
+
 	function block(row) {
 		const cards = parse(row.cards_used).map((c) => one_line(c.id) + " v" + one_line(c.version)).join(", ");
 		const confirmed = row.status === "Confirmed" ? " (by " + one_line(frappe.user.full_name(row.confirmed_by) || row.confirmed_by) + " on " + one_line(row.confirmed_on) + ")" : "";
 		return [
-			"## " + row.name + ": " + one_line(row.title),
+			"## " + row.name,
+			"",
+			"Title:",
+			fenced(row.title),
 			"",
 			"- Status: " + row.status + confirmed,
 			"- Author: " + one_line(who(row)) + "   Date: " + String(row.creation || "").slice(0, 10) + "   Lending version: " + one_line(row.lending_version),
@@ -37,9 +49,12 @@
 			"- Doctypes: " + listing(row.doctypes),
 			"- Sources: " + parse(row.sources).map(one_line).join(", "),
 			"- Cards: " + cards + (row.cards_basis ? " (" + one_line(row.cards_basis) + ")" : ""),
-			"- Question: " + one_line(row.question),
 			"",
-			String(row.summary || "").split("\n").map((line) => "> " + line).join("\n"),
+			"Question:",
+			fenced(row.question),
+			"",
+			"Summary:",
+			fenced(row.summary),
 			"",
 		].join("\n");
 	}

@@ -399,6 +399,7 @@ APP_GRANTS = [
 	(f"{ASSISTANT}.ratelimit", "FEEDBACK_PREFIX", ("api/chat.py",), False),
 	(f"{PACKAGE}.install", "seed_defaults", ("patches/",), False),
 	(f"{PACKAGE}.install", "raise_max_tokens_default", ("patches/",), False),
+	(f"{PACKAGE}.install", "lower_default_effort", ("patches/",), False),
 ]
 # A doctype controller: `...doctype.<x>.<x>` (a class that loads rows without any permission check).
 CONTROLLER = re.compile(r"(?:^|\.)doctype\.(\w+)\.\1(?:\.|$)")

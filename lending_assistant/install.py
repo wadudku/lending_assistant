@@ -51,7 +51,8 @@ DEFAULT_NEVER_SEND = [
 	("Loan Disbursement", "bank_account"),
 	("Loan Repayment", "bank_account"),
 ]
-DEFAULT_EFFORT = "high"  # DECISIONS #31: default model (Sonnet 5.5)
+DEFAULT_EFFORT = "medium"  # DECISIONS #145 (was high in #31): default model (Sonnet 5.5)
+OLD_DEFAULT_EFFORT = "high"  # the value #31 seeded; only this is changed by the #145 patch
 DEEP_EFFORT = "medium"  # DECISIONS #31: Deep analysis model (Opus 5.5)
 OLD_MAX_TOKENS = 4096
 NEW_MAX_TOKENS = 16000  # DECISIONS #32
@@ -122,5 +123,16 @@ def raise_max_tokens_default() -> bool:
 	if settings.max_tokens != OLD_MAX_TOKENS:
 		return False
 	settings.max_tokens = NEW_MAX_TOKENS
+	settings.save(ignore_permissions=True)  # AST-ALLOWED: install seed
+	return True
+
+
+def lower_default_effort() -> bool:
+	"""DECISIONS #145: default_effort high -> medium, but only while the stored value is still the seeded `high` (an owner
+	edit, including a later choice of `high` after the patch has run once, is not touched by any other value)."""
+	settings = frappe.get_doc("Assistant Settings")  # AST-ALLOWED: install seed
+	if settings.default_effort != OLD_DEFAULT_EFFORT:
+		return False
+	settings.default_effort = DEFAULT_EFFORT
 	settings.save(ignore_permissions=True)  # AST-ALLOWED: install seed
 	return True

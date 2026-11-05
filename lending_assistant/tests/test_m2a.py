@@ -227,7 +227,7 @@ class TestSettingsSeeds(AssistantTestCase):
 		result = install.seed_defaults()
 		self.assertEqual(result["set_effort"], ["default_effort", "deep_effort"])
 		settings = frappe.get_doc("Assistant Settings")
-		self.assertEqual((settings.default_effort, settings.deep_effort), ("high", "medium"))
+		self.assertEqual((settings.default_effort, settings.deep_effort), ("medium", "medium"))
 
 		# an owner's choice is kept
 		settings.default_effort = "max"

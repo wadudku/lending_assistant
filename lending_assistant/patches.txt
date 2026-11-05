@@ -6,3 +6,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 lending_assistant.patches.seed_default_settings
 lending_assistant.patches.seed_effort_tokens_never_send
+lending_assistant.patches.set_default_effort_medium

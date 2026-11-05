@@ -155,10 +155,10 @@ ALLOWLIST = [
 	("frappe.cache.*", ("assistant/ratelimit.py",), "call", False),
 	(
 		"frappe.logger",
-		("assistant/tools/registry.py",),
+		("assistant/tools/registry.py", "assistant/orchestrator.py"),
 		"call",
 		False,
-	),  # M4a: the file log of refusals (no database)
+	),  # M4a: the file log of refusals (no database); M4b: the orchestrator's log of API errors (class and status only)
 	("frappe.local.request_ip", ("api/chat.py",), "read", False),
 	# marked lines only. get_meta returns a live Meta (a Document): tool code gets meta facts from guard/access helpers
 	("frappe.get_meta", (GUARD, "assistant/access.py", "install.py", "kb/validate.py"), "call", True),
@@ -203,6 +203,7 @@ _PLAIN_IMPORTS = {
 	"kb/store.py": ("json", "os", "re"),
 	"kb/validate.py": ("json", "os", "re"),
 	"assistant/tools/registry.py": ("json",),
+	"assistant/orchestrator.py": ("time",),
 }
 _FROM_IMPORTS = {
 	GUARD: (
@@ -270,6 +271,9 @@ APP_API = {
 	f"{ASSISTANT}.tools.code": set(),
 	f"{ASSISTANT}.tools.dues": set(),
 	f"{ASSISTANT}.tools.registry": set(),
+	f"{ASSISTANT}.prompts": set(),
+	f"{ASSISTANT}.trace": set(),
+	f"{ASSISTANT}.orchestrator": set(),
 	f"{ASSISTANT}.audit": set(),
 	f"{ASSISTANT}.ratelimit": set(),
 	f"{PACKAGE}.install": set(),
@@ -354,6 +358,36 @@ APP_GRANTS = [
 		for name in ("dispatch", "tool_definitions", "ToolResult", "ToolError")
 	],
 	(f"{ASSISTANT}.settings", "get_api_key", ("assistant/orchestrator.py",), True),
+	# M4b: the orchestrator's own helpers, per file
+	*[
+		(f"{ASSISTANT}.prompts", name, ("assistant/orchestrator.py",), False)
+		for name in (
+			"stable_block",
+			"volatile_block",
+			"history_messages",
+			"check_labels",
+			"MESSAGES",
+			"REPAIR_REQUEST",
+			"WRAP_UP_REQUEST",
+			"CUT_NOTICE",
+			"LABELS_MISSING_NOTICE",
+		)
+	],
+	*[
+		(f"{ASSISTANT}.trace", name, ("assistant/orchestrator.py",), False)
+		for name in (
+			"UsageTotals",
+			"cap_arguments",
+			"records_from",
+			"code_files_from",
+			"cards_from",
+			"web_sources_from",
+			"merge_unique",
+			"plain",
+		)
+	],
+	(f"{ASSISTANT}.guard", "unwrap", ("assistant/trace.py",), False),
+	(f"{ASSISTANT}.orchestrator", "run", ("api/chat.py",), False),
 	(f"{ASSISTANT}.audit", "CONVERSATION", ("api/chat.py",), False),
 	(f"{ASSISTANT}.audit", "MESSAGE", ("api/chat.py",), False),
 	(f"{ASSISTANT}.audit", "start_conversation", ("api/chat.py",), False),

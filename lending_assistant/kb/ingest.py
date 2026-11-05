@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 
 from lending_assistant.kb import store
 
@@ -39,17 +40,36 @@ def _read_bytes(path: str) -> bytes:
 		return handle.read()
 
 
-def _write_bytes(root: str, path: str, data: bytes) -> None:
-	"""Write `data` to `path`, which must sit inside `root` (one of the two destination folders)."""
+def _inside(root: str, path: str) -> bool:
 	real_root = os.path.realpath(root)
 	real = os.path.realpath(path)
-	if not real.startswith(real_root + os.sep):
+	return real == real_root or real.startswith(real_root + os.sep)
+
+
+def _make_dirs(root: str, path: str) -> None:
+	"""Create the folder `path`, which must sit inside `root`."""
+	if not _inside(root, path):
+		raise IngestRefused(f"refusing to create a folder outside {root}: {path}")
+	os.makedirs(path, exist_ok=True)  # AST-ALLOWED: ingest creates folders only under kb/knowledge/ and public/kb_img/ (checked above)
+
+
+def _remove_file(root: str, path: str) -> None:
+	"""Delete the file `path`, which must sit inside `root`."""
+	if not _inside(root, path) or os.path.realpath(path) == os.path.realpath(root):
+		raise IngestRefused(f"refusing to delete outside {root}: {path}")
+	os.remove(os.path.realpath(path))  # AST-ALLOWED: ingest removes only files it owns under its two folders (checked above)
+
+
+def _write_bytes(root: str, path: str, data: bytes) -> None:
+	"""Write `data` to `path`, which must sit inside `root` (one of the two destination folders)."""
+	real = os.path.realpath(path)
+	if not _inside(root, real) or real == os.path.realpath(root):
 		raise IngestRefused(f"refusing to write outside {root}: {path}")
-	os.makedirs(os.path.dirname(real), exist_ok=True)
+	_make_dirs(root, os.path.dirname(real))
 	temp = real + ".tmp"
 	with open(temp, "wb") as handle:  # AST-ALLOWED: ingest writes only under kb/knowledge/ and public/kb_img/ (checked above)
 		handle.write(data)
-	os.replace(temp, real)
+	os.replace(temp, real)  # AST-ALLOWED: moves the temp file written just above onto its target inside the same folder
 
 
 def _list_dir(path: str) -> list[str]:
@@ -173,17 +193,54 @@ def _plan(source: str, commit: str) -> dict:
 # --- apply -------------------------------------------------------------------------------------------------------------
 
 
-def _existing(root: str, subfolders) -> set[str]:
-	"""Relative paths of the files we own under `root` (cards/<type>/*.md and index/manifest; or image folders)."""
+def _owned_card(rel: str) -> bool:
+	"""`cards/<type>/<id>.md`, `index.json` or the manifest: the only kinds of file ingest deletes in its knowledge folder."""
+	parts = rel.split("/")
+	if rel in ("index.json", MANIFEST):
+		return True
+	return (
+		len(parts) == 3 and parts[0] == "cards" and parts[1] in store.TYPES and parts[2].endswith(".md")
+		and bool(store.CARD_ID.match(parts[2][:-3])) and parts[2][:-3].startswith(parts[1] + ".")
+	)
+
+
+def _owned_image(rel: str) -> bool:
+	return bool(IMAGE_NAME.match(rel))
+
+
+def _existing(root: str, subfolders, owned) -> set[str]:
+	"""Relative paths of the files we own under `root`; only names that match the card or image patterns count."""
 	found = set()
 	for sub in subfolders:
 		for folder in _list_dir(os.path.join(root, sub)):
 			path = os.path.join(root, sub, folder)
 			if os.path.isdir(path):
-				found.update(f"{sub}/{folder}/{name}" for name in _list_dir(path))
+				found.update(f"{sub}/{folder}/{name}".lstrip("/") for name in _list_dir(path))
 			else:
-				found.add(f"{sub}/{folder}")
-	return found
+				found.add(f"{sub}/{folder}".lstrip("/"))
+	return {rel for rel in found if owned(rel)}
+
+
+def _check_targets(root: str, rels, kind: str) -> None:
+	"""Plan phase: every file that will be written or deleted resolves inside `root` (no symlink escape). Raises
+	before anything is written."""
+	for rel in rels:
+		path = os.path.join(root, *rel.split("/"))
+		if not _inside(root, path) or os.path.realpath(path) == os.path.realpath(root):
+			raise IngestRefused(f"{kind} target {rel!r} resolves outside {root}")
+		folder = os.path.dirname(path)
+		while folder != os.path.abspath(root) and not os.path.exists(folder) and not os.path.islink(folder):
+			folder = os.path.dirname(folder)
+		if os.path.exists(folder) and not _inside(root, folder):
+			raise IngestRefused(f"{kind} folder for {rel!r} resolves outside {root}")
+
+
+def _check_destination(path: str, default: str) -> None:
+	"""A destination must be the app's own folder or sit inside a temp directory (the tests)."""
+	real = os.path.realpath(path)
+	allowed = (os.path.realpath(default), os.path.realpath(tempfile.gettempdir()))
+	if not any(real == base or real.startswith(base + os.sep) for base in allowed):
+		raise IngestRefused(f"refusing destination {path!r}: it is neither {default} nor inside a temp directory")
 
 
 def _apply(root: str, wanted: dict[str, bytes], owned: set[str]) -> dict:
@@ -202,10 +259,8 @@ def _apply(root: str, wanted: dict[str, bytes], owned: set[str]) -> dict:
 		else:
 			changed += 1
 	for rel in sorted(owned - set(wanted)):
-		path = os.path.realpath(os.path.join(root, *rel.split("/")))
-		if path.startswith(os.path.realpath(root) + os.sep):
-			os.remove(path)
-			removed += 1
+		_remove_file(root, os.path.join(root, *rel.split("/")))
+		removed += 1
 	return {"new": new, "changed": changed, "removed": removed}
 
 
@@ -217,10 +272,14 @@ def run(source=None, dest=None, img_dest=None, commit=None):
 		raise IngestRefused("commit= is required: the build repo commit the cards come from (git rev-parse HEAD)")
 	dest = dest or DEFAULT_DEST
 	img_dest = img_dest or DEFAULT_IMG_DEST
+	_check_destination(dest, DEFAULT_DEST)
+	_check_destination(img_dest, DEFAULT_IMG_DEST)
 	plan = _plan(os.path.abspath(source), commit)
-	owned_dest = _existing(dest, ["cards"]) | {name for name in _list_dir(dest) if name in ("index.json", MANIFEST)}
-	owned_img = _existing(img_dest, [""]) if os.path.isdir(img_dest) else set()
-	owned_img = {name.lstrip("/") for name in owned_img}
+	owned_dest = _existing(dest, ["cards"], _owned_card) | {name for name in _list_dir(dest) if name in ("index.json", MANIFEST)}
+	owned_img = _existing(img_dest, [""], _owned_image) if os.path.isdir(img_dest) else set()
+	# all destination checks happen here, before the first write
+	_check_targets(dest, [*plan["files"], *owned_dest], "knowledge")
+	_check_targets(img_dest, [*plan["images"], *owned_img], "image")
 	first = _apply(dest, plan["files"], owned_dest)
 	second = _apply(img_dest, plan["images"], owned_img)
 	result = {key: first[key] + second[key] for key in first}

@@ -122,6 +122,53 @@ class TestIngest(AssistantTestCase):
 			ingest._write_bytes(self.dest, os.path.join(self.dest, "..", "evil.txt"), b"x")
 		self.assertFalse(os.path.exists(os.path.join(self.out, "evil.txt")))
 
+	def test_it_refuses_a_destination_that_is_not_the_app_folder_or_a_temp_folder(self):
+		for kw in ({"dest": os.path.join(ingest.PACKAGE_DIR, "public")}, {"img_dest": os.path.join(ingest.PACKAGE_DIR, "public")},
+			{"dest": "/etc"}, {"img_dest": os.path.expanduser("~")}, {"dest": ingest.PACKAGE_DIR}):
+			with self.subTest(kw=kw):
+				args = {"dest": self.dest, "img_dest": self.img, **kw}
+				with self.assertRaises(ingest.IngestRefused):
+					ingest.run(self.source, commit=fx.COMMIT, **args)
+		self.assertFalse(os.path.exists(self.dest))
+		self.assertFalse(os.path.exists(self.img))
+
+	def test_it_deletes_only_files_that_match_the_card_and_image_patterns(self):
+		self.run_ingest()
+		keep = [
+			os.path.join(self.img, "someone_else", "keep.txt"), os.path.join(self.img, "top.txt"),
+			os.path.join(self.dest, "cards", "notes", "mine.md"), os.path.join(self.dest, "cards", "howto", "notes.txt"),
+			os.path.join(self.dest, "cards", "howto", "mine.md"), os.path.join(self.dest, "readme.md"),
+		]
+		for path in keep:
+			os.makedirs(os.path.dirname(path), exist_ok=True)
+			open(path, "w").write("mine")
+		stale = os.path.join(self.dest, "cards", "howto", "howto.old.card.md")
+		open(stale, "w").write("old")
+		stale_img = os.path.join(self.img, "J1", "old.png")
+		open(stale_img, "w").write("old")
+		result = self.run_ingest()
+		self.assertEqual(result["removed"], 2)
+		self.assertFalse(os.path.exists(stale))
+		self.assertFalse(os.path.exists(stale_img))
+		for path in keep:
+			self.assertTrue(os.path.exists(path), path)
+
+	def test_a_symlink_escape_is_refused_in_the_plan_phase_and_writes_nothing(self):
+		outside = tempfile.mkdtemp(prefix="ast_kb_outside_")
+		self.addCleanup(fx.cleanup, outside)
+		for link_at, kw in ((("cards", "glossary"), "dest"), (("J1",), "img")):
+			base = self.dest if kw == "dest" else self.img
+			os.makedirs(os.path.dirname(os.path.join(base, *link_at)), exist_ok=True)
+			os.symlink(outside, os.path.join(base, *link_at))
+			with self.assertRaises(ingest.IngestRefused):
+				self.run_ingest()
+			self.assertEqual(os.listdir(outside), [])
+			# nothing was written anywhere in the destinations either (cards of other types, the index, the images)
+			written = [f for root, _d, files in os.walk(self.out) for f in files]
+			self.assertEqual(written, [], kw)
+			os.unlink(os.path.join(base, *link_at))
+			fx.cleanup(self.dest, self.img)
+
 	def test_the_ingested_app_copy_matches_the_manifest(self):
 		"""The real set: 941 approved cards, no draft, hashes match, images equal the ones the cards use."""
 		manifest = json.load(open(os.path.join(store.KB_ROOT, "ingest_manifest.json")))

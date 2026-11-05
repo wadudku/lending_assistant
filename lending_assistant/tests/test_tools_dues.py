@@ -27,7 +27,12 @@ def page_lister(all_rows, per_call=None):
 		calls.append(filters)
 		last = next((f[2] for f in filters if f[0] == "name"), "")
 		due = next(f[2] for f in filters if f[0] == "demand_date")
-		rows = [r for r in all_rows if r["name"] > last and r["demand_date"] <= due][:limit]
+		bal = next(f for f in filters if f[0] == "outstanding_amount")
+		rows = [
+			r for r in all_rows
+			if r["name"] > last and r["demand_date"] <= due
+			and (r["outstanding_amount"] > 0 if bal[1] == ">" else r["outstanding_amount"] <= 0)
+		][:limit]  # fmt: skip
 		return guard.as_data(
 			{
 				"rows": [{k: r.get(k) for k in fields} for r in rows],
@@ -92,16 +97,38 @@ class TestLoanDuesLogic(ToolTestCase):
 		data, lister = self.run_with(rows)
 		self.assertEqual(data["rows_read"], 45)
 		self.assertEqual(data["totals"]["outstanding"], 45.0)
-		self.assertEqual(len(lister.calls), 3)
+		self.assertEqual(len(lister.calls), 4)  # three pages of open demands, one of settled
 		self.assertFalse(data["incomplete"])
+		self.assertEqual(
+			data["complete_totals"], ["outstanding", "overdue", "due_on_date", "billed", "paid", "waived"]
+		)
 
 	def test_the_row_cap_marks_the_result_incomplete(self):
-		rows = [row(i, left=1, amount=1) for i in range(1, 260)]
+		rows = [
+			row(i, left=1, amount=1) for i in range(1, 260)
+		]  # all with a balance: more than one phase can read
 		data, lister = self.run_with(rows)
 		self.assertEqual(data["rows_read"], dues.MAX_PAGES * dues.PAGE)
 		self.assertTrue(data["incomplete"])
-		self.assertIn("lower bounds", data["incomplete_note"])
-		self.assertEqual(len(lister.calls), dues.MAX_PAGES)
+		self.assertIn("every total is a lower bound", data["incomplete_note"])
+		self.assertEqual(data["complete_totals"], [])
+		self.assertEqual(
+			len(lister.calls), dues.MAX_PAGES + 1
+		)  # the capped open phase, then one settled call
+
+	def test_a_loan_with_over_200_demands_keeps_outstanding_and_overdue_complete(self):
+		"""R5: 300 settled demands (the oldest names) and 15 open ones (the newest): the old name-order read lost the open ones."""
+		settled = [row(i, left=0, amount=10, paid=10, date="2025-01-05 00:00:00") for i in range(1, 301)]
+		open_ = [row(i, left=7, amount=10, paid=3, date="2025-06-05 00:00:00") for i in range(301, 316)]
+		data, lister = self.run_with([*settled, *open_])
+		self.assertEqual(data["totals"]["outstanding"], 105.0)
+		self.assertEqual(data["totals"]["overdue"], 105.0)
+		self.assertTrue(data["incomplete"])  # the 300 settled rows did not all fit
+		self.assertEqual(data["complete_totals"], ["outstanding", "overdue", "due_on_date"])
+		self.assertIn("Outstanding and overdue are complete", data["incomplete_note"])
+		self.assertEqual(data["rows_read"], 15 + dues.MAX_PAGES * dues.PAGE)
+		self.assertLessEqual(data["totals"]["billed"], 3150.0)
+		self.assertEqual(len(lister.calls), 1 + dues.MAX_PAGES)
 
 	def test_bad_dates_are_refused_in_python(self):
 		for bad in ("2026-13-01", "01-02-2026", "tomorrow", "", 20260101, "2026-1-1  "):

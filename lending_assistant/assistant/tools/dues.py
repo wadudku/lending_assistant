@@ -23,7 +23,7 @@ NOTE = (
 )
 OUTSTANDING_NOTE = "Outstanding is the current stored balance of each demand raised up to as_on_date, not a restatement of that day."
 PAGE = guard.MAX_ROWS
-MAX_PAGES = 10  # 200 rows per loan
+MAX_PAGES = 10  # 200 rows per phase: demands with a balance, then settled ones
 ZERO = Decimal(0)
 LOAN_FIELDS = (
 	"status", "loan_product", "loan_amount", "disbursed_amount", "rate_of_interest", "penalty_charges_rate",
@@ -77,14 +77,16 @@ def _out(value: Decimal) -> float:
 	return float(round(value, 2))
 
 
-def _rows(loan: str, on: date, fields: list) -> tuple[list, bool]:
-	"""Up to MAX_PAGES pages of this loan's submitted demands due on or before `on`, in name order (keyset on `name`)."""
+def _rows(loan: str, on: date, fields: list, balance: list) -> tuple[list, bool]:
+	"""Up to MAX_PAGES pages of this loan's submitted demands due on or before `on` that match the `balance` filter
+	(`outstanding_amount > 0` or `<= 0`), in name order (keyset on `name`). Second value: the cap was reached."""
 	rows, last, incomplete = [], None, False
 	for page in range(MAX_PAGES):
 		filters = [
 			["loan", "=", loan],
 			["docstatus", "=", 1],
 			["demand_date", "<=", f"{on.isoformat()} 23:59:59"],
+			balance,
 		]
 		if last is not None:
 			filters.append(["name", ">", last])
@@ -114,7 +116,13 @@ def get_loan_dues(loan, as_on_date=None) -> str:
 	with_waived = "waived_amount" in readable
 	if with_waived:
 		fields.append("waived_amount")
-	rows, incomplete = _rows(loan_payload["name"], on, fields)
+	# Demands with a balance first, under their own cap, so outstanding and overdue are complete whenever those rows fit
+	# (R5); then the settled ones, under a second cap, which only billed, paid and waived depend on.
+	open_rows, open_capped = _rows(loan_payload["name"], on, fields, ["outstanding_amount", ">", 0])
+	settled_rows, settled_capped = _rows(loan_payload["name"], on, fields, ["outstanding_amount", "<=", 0])
+	rows, incomplete = [*open_rows, *settled_rows], open_capped or settled_capped
+	balance_complete = not open_capped
+	totals_complete = not incomplete
 
 	groups, totals = (
 		{},
@@ -167,9 +175,19 @@ def get_loan_dues(loan, as_on_date=None) -> str:
 		"note": NOTE,
 		"outstanding_note": OUTSTANDING_NOTE,
 	}
+	result["complete_totals"] = [
+		*(["outstanding", "overdue", "due_on_date"] if balance_complete else []),
+		*(["billed", "paid", "waived"] if totals_complete else []),
+	]
 	if incomplete:
+		cap = MAX_PAGES * PAGE
 		result["incomplete_note"] = (
-			f"Only the first {MAX_PAGES * PAGE} demands were read; the totals are lower bounds."
+			f"Demands with a balance were read first (up to {cap}), then settled ones (up to {cap}). "
+			+ (
+				"Outstanding and overdue are complete; billed, paid and waived are lower bounds."
+				if balance_complete
+				else "More than that many demands still have a balance: every total is a lower bound."
+			)
 		)
 	cleaned = guard.unwrap(guard.as_data(result))
 	guard.fit(cleaned, row_lists=lambda: [cleaned["by_demand"]], field_dicts=lambda: [])

@@ -10,10 +10,15 @@ frappe.provide("lending_assistant");
 	const ROLE = "Assistant User";
 	const ASK = "lending_assistant.api.chat.ask";
 	const FEEDBACK = "lending_assistant.api.chat.feedback";
+	const SAVE = "lending_assistant.api.findings.save";
 	const LIST = "frappe.client.get_list";
 	const CONVERSATION = "Assistant Conversation";
 	const MESSAGE = "Assistant Message";
 	const KB_IMG = "/assets/lending_assistant/kb_img/";
+	const FINDING_ROUTE = "/app/assistant-finding/";
+	const FINDING_NAME = /^AF-\d{5,}$/;
+	const MAX_TITLE = 140;
+	const MAX_SUMMARY = 4000;
 	const PREFS_KEY = "lending_assistant.prefs";
 	const CLIENT_TIMEOUT_MS = 130000; // server budget is 90 s (100 s Deep), see orchestrator.BUDGET
 	const HISTORY_CAP = 30;
@@ -62,16 +67,23 @@ frappe.provide("lending_assistant");
 
 	// ---- rendering: the only place model text becomes markup -------------------------------------------------------
 
-	// http(s) links, or a same-origin path that starts with ONE slash. Everything else is not a link.
+	// Links: http(s) to other sites; on THIS site only /app/... and /assets/lending_assistant/... (a GET API route such as
+	// /api/method/logout must not become a link, M5-I1). Absolute URLs on this origin and dot-segment or encoded tricks go
+	// through the same rule. Anything else is not a link: harden() keeps its text.
 	function safe_href(href) {
 		if (typeof href !== "string" || /[\s\u0000-\u001f\\]/.test(href)) return null;
-		if (href.startsWith("/")) return href.startsWith("//") ? null : href;
+		let url;
 		try {
-			const url = new URL(href);
-			return url.protocol === "https:" || url.protocol === "http:" ? href : null;
+			url = new URL(href, window.location.origin);
 		} catch (e) {
 			return null;
 		}
+		if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+		if (!href.startsWith("/") && url.origin !== window.location.origin) return href;
+		if (href.startsWith("//")) return null;
+		const path = url.pathname;
+		if (/\.\.|%2e|%2f|%5c|\/\/|\/\.(\/|$)/i.test(path)) return null;
+		return path === "/app" || path.startsWith("/app/") || path.startsWith("/assets/lending_assistant/") ? href : null;
 	}
 
 	function safe_img(src) {
@@ -199,8 +211,105 @@ frappe.provide("lending_assistant");
 		render_answer(body, msg.answer);
 		wrap.appendChild(body);
 		if (msg.message) wrap.appendChild(feedback_row(msg));
+		const finding = finding_row(msg);
+		if (finding) wrap.appendChild(finding);
 		ui.log.appendChild(wrap);
 		scroll_down();
+	}
+
+	// ---- findings: Save as finding (a click is the only way a finding is made, G13) ----------------------------------
+
+	function suggestion_of(msg) {
+		let s = msg.suggestion;
+		if (!s && msg.finding_suggestion) {
+			try {
+				s = JSON.parse(msg.finding_suggestion);
+			} catch (e) {
+				s = null;
+			}
+		}
+		if (!s || typeof s.title !== "string" || typeof s.summary !== "string") return null;
+		return {
+			title: s.title,
+			summary: s.summary,
+			br_ids: Array.isArray(s.br_ids) ? s.br_ids.map(String) : [],
+			doctypes: Array.isArray(s.doctypes) ? s.doctypes.map(String) : [],
+		};
+	}
+
+	function saved_row(name) {
+		const row = el("div", "ast-finding ast-finding-saved");
+		row.appendChild(el("span", "", __("Saved as") + " "));
+		if (typeof name === "string" && FINDING_NAME.test(name)) {
+			const link = el("a", "", name);
+			link.href = FINDING_ROUTE + encodeURIComponent(name);
+			link.target = "_blank";
+			link.rel = "noopener noreferrer";
+			row.appendChild(link);
+		} else {
+			row.appendChild(el("span", "", __("a finding")));
+		}
+		return row;
+	}
+
+	function finding_row(msg) {
+		if (!msg.message) return null;
+		if (msg.finding) return saved_row(msg.finding);
+		const suggestion = suggestion_of(msg);
+		if (!suggestion) return null;
+		const row = el("div", "ast-finding");
+		const button = el("button", "ast-finding-save", __("Save as finding"));
+		button.type = "button";
+		button.addEventListener("click", () => open_save_dialog(msg, suggestion, row));
+		row.appendChild(button);
+		return row;
+	}
+
+	// The dialog title and every label are fixed translated strings (Frappe inserts a dialog title as HTML). The model's
+	// title, summary and references only ever travel as field VALUES, which Frappe puts in inputs or escapes.
+	function open_save_dialog(msg, suggestion, row) {
+		let saving = false;
+		const dialog = new frappe.ui.Dialog({
+			title: __("Save as finding"),
+			fields: [
+				{ fieldname: "title", fieldtype: "Data", label: __("Title"), reqd: 1 },
+				{ fieldname: "summary", fieldtype: "Text", label: __("Summary"), reqd: 1 },
+				{ fieldname: "refs", fieldtype: "Small Text", label: __("BR ids and doctypes"), read_only: 1 },
+			],
+			primary_action_label: __("Save"),
+			primary_action: function (values) {
+				const title = String(values.title || "").trim();
+				const summary = String(values.summary || "").trim();
+				if (!title || title.length > MAX_TITLE) {
+					add_line("error", __("The title is required and at most {0} characters.", [MAX_TITLE]));
+					return;
+				}
+				if (!summary || summary.length > MAX_SUMMARY) {
+					add_line("error", __("The summary is required and at most {0} characters.", [MAX_SUMMARY]));
+					return;
+				}
+				if (saving) return;
+				saving = true;
+				post(SAVE, { message: msg.message, title: title, summary: summary })
+					.then(function (res) {
+						saving = false;
+						if (res.ok && res.data.message && res.data.message.finding) {
+							dialog.hide();
+							row.replaceWith(saved_row(res.data.message.finding));
+						} else {
+							add_line("error", message_of(res.data) || __("The finding could not be saved."));
+						}
+					})
+					.catch(function () {
+						saving = false;
+						add_line("error", __("The finding could not be saved."));
+					});
+			},
+		});
+		dialog.set_value("title", suggestion.title);
+		dialog.set_value("summary", suggestion.summary);
+		dialog.set_value("refs", suggestion.br_ids.concat(suggestion.doctypes).join("\n"));
+		dialog.show();
 	}
 
 	// ---- feedback --------------------------------------------------------------------------------------------------
@@ -478,7 +587,7 @@ frappe.provide("lending_assistant");
 			args: {
 				doctype: MESSAGE,
 				filters: { conversation: name, user: frappe.session.user },
-				fields: ["name", "question", "answer", "status", "depth", "deep", "feedback", "feedback_comment", "route", "creation"],
+				fields: ["name", "question", "answer", "status", "depth", "deep", "feedback", "feedback_comment", "route", "creation", "finding_suggestion", "finding"],
 				order_by: "creation desc",
 				limit_page_length: MESSAGE_CAP,
 			},
@@ -490,7 +599,7 @@ frappe.provide("lending_assistant");
 				if (rows.length >= MESSAGE_CAP) add_line("note", __("Older messages are not shown."));
 				for (const row of rows) {
 					add_line("user", row.question || "");
-					add_answer({ message: row.name, answer: row.answer || "", status: row.status, feedback: row.feedback, feedback_comment: row.feedback_comment });
+					add_answer({ message: row.name, answer: row.answer || "", status: row.status, feedback: row.feedback, feedback_comment: row.feedback_comment, finding_suggestion: row.finding_suggestion, finding: row.finding });
 				}
 			},
 			error: function (xhr) {

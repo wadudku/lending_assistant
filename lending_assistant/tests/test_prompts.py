@@ -30,14 +30,15 @@ class TestStablePrompt(AssistantTestCase):
 			with self.subTest(point=point):
 				self.assertIn(point, text)
 
-	def test_it_names_only_registered_tools_and_says_there_are_no_findings_yet(self):
+	def test_it_names_only_registered_tools_and_points_to_search_findings(self):
 		named = set(re.findall(r"\b([a-z]+_[a-z_]+)\b", prompts.STABLE_PROMPT)) & {
 			"lookup_knowledge", "get_card", "search_knowledge", "get_screen_help", "check_my_access", "find_records",
 			"get_record", "get_loan_dues", "search_code", "read_code", "search_findings", "suggest_finding",
 		}  # fmt: skip
 		self.assertTrue(named <= set(registry.TOOLS), named - set(registry.TOOLS))
-		self.assertIn("none yet", prompts.STABLE_PROMPT)
-		self.assertNotIn("search_findings", prompts.STABLE_PROMPT)
+		self.assertNotIn("none yet", prompts.STABLE_PROMPT)
+		self.assertIn("search_findings", prompts.STABLE_PROMPT)
+		self.assertIn("suggest_finding", prompts.STABLE_PROMPT)
 
 	def test_the_stable_block_is_one_cached_text_block_with_no_per_request_content(self):
 		block = prompts.stable_block()

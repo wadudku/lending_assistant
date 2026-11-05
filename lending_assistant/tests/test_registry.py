@@ -17,7 +17,7 @@ from lending_assistant.tests.base import ToolTestCase
 
 PLAN_TOOLS = {
 	"lookup_knowledge", "get_card", "search_knowledge", "get_screen_help", "check_my_access", "find_records",
-	"get_record", "search_code", "read_code", "get_loan_dues",
+	"get_record", "search_code", "read_code", "get_loan_dues", "search_findings", "suggest_finding",
 }  # fmt: skip
 BANNED_KEYWORDS = {
 	"maxLength", "minLength", "pattern", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
@@ -39,7 +39,7 @@ def walk(schema, path="input_schema"):
 class TestRegistryShape(ToolTestCase):
 	def test_the_registry_has_exactly_the_plan_tools_and_none_of_the_later_ones(self):
 		self.assertEqual(set(registry.TOOLS), PLAN_TOOLS)
-		for later in ("search_findings", "suggest_finding", "web_search"):
+		for later in ("web_search",):
 			self.assertNotIn(later, registry.TOOLS)
 
 	def test_every_entry_has_the_keys_a_valid_switch_and_a_valid_source(self):
@@ -59,6 +59,7 @@ class TestRegistryShape(ToolTestCase):
 			"find_records": ("live_data", "live_site"), "get_record": ("live_data", "live_site"),
 			"search_code": ("code_reader", "code"), "read_code": ("code_reader", "code"),
 			"get_loan_dues": ("live_data", "live_site"),
+			"search_findings": (None, "team_finding"), "suggest_finding": (None, "suggestion"),
 		}  # fmt: skip
 		actual = {n: (e["needs_switch"], e["source"]) for n, e in registry.TOOLS.items()}
 		self.assertEqual(actual, expected)

@@ -402,5 +402,7 @@ class TestToolsPerPersona(ToolTestCase):
 			"lookup_knowledge",
 			"get_card",
 			"get_loan_dues",  # per persona in test_tools_dues.py
+			"search_findings",  # per persona in test_tools_findings.py
+			"suggest_finding",  # per persona in test_tools_findings.py
 		}
 		self.assertEqual(set(registry.TOOLS), exercised)

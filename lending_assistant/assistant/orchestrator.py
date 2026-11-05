@@ -101,6 +101,7 @@ class _Turn:
 		self.tool_calls, self.records_read, self.code_files_read, self.cards_used = [], [], [], []
 		self.web_sources = []
 		self.sources = []  # source labels of tool results that returned data
+		self.suggestion = None  # the last valid suggest_finding of the turn (M6)
 		self.web_used = False
 		self.tool_rounds = 0
 		self.started = _clock()
@@ -127,6 +128,7 @@ class _Turn:
 			"code_files_read": self.code_files_read or None,
 			"cards_used": self.cards_used or None,
 			"web_sources": self.web_sources or None,
+			"suggestion": self.suggestion,
 			"usage": self.usage.as_dict(),
 		}
 
@@ -195,6 +197,16 @@ def _clamp(value: float, low: float, high: float) -> float:
 	return max(low, min(high, value))
 
 
+NO_LABEL_SOURCES = ("suggestion",)  # a suggest_finding result needs no label (M6)
+
+
+def _counts_as_source(source, content) -> bool:
+	"""Does this result make its label compulsory (G11)? Not a suggestion, and a findings search only when it found any."""
+	if not source or source in NO_LABEL_SOURCES:
+		return False
+	return trace.has_results(content) if source == "team_finding" else True
+
+
 def _run_tool(turn: _Turn, block) -> dict:
 	"""Run one `tool_use` block through the dispatcher. A refusal comes back as an error result; a RAISE ends the turn."""
 	view = trace.plain(block)
@@ -230,8 +242,11 @@ def _run_tool(turn: _Turn, block) -> dict:
 	if result.is_error:
 		out["is_error"] = True
 	else:
-		if result.source and result.source not in turn.sources:
+		if _counts_as_source(result.source, result.content) and result.source not in turn.sources:
 			turn.sources.append(result.source)
+		found = trace.suggestion_from(label, result.content)
+		if found:
+			turn.suggestion = found  # the last valid one wins; an error result never gets here
 		trace.merge_unique(turn.records_read, trace.records_from(label, result.content))
 		trace.merge_unique(turn.code_files_read, trace.code_files_from(label, result.content))
 		trace.merge_unique(turn.cards_used, trace.cards_from(label, result.content))

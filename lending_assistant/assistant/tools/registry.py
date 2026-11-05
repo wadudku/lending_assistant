@@ -27,7 +27,7 @@ from typing import NamedTuple
 import frappe
 
 from lending_assistant.assistant import codereader, guard, settings
-from lending_assistant.assistant.tools import code, dues, knowledge, live
+from lending_assistant.assistant.tools import code, dues, findings, knowledge, live
 
 MAX_STRING = 200  # characters of any string argument, unless LIMITS says otherwise
 MAX_ARRAY = 50  # items of any array argument, unless LIMITS says otherwise
@@ -45,9 +45,19 @@ LIMITS = {  # "<tool>.<argument path>": characters (strings) or items (arrays)
 	"find_records.fields": guard.MAX_FIELDS,
 	"find_records.order_by": 100,
 	"get_screen_help.search": 100,
+	"search_findings.query": 500,
+	"search_findings.br_id": 40,
+	"search_findings.doctype": 140,
+	"suggest_finding.title": 140,
+	"suggest_finding.summary": 4000,
+	"suggest_finding.br_ids": 10,
+	"suggest_finding.br_ids[]": 40,
+	"suggest_finding.doctypes": 10,
+	"suggest_finding.doctypes[]": 140,
+	"suggest_finding.sources": 6,
 }
 SWITCHES = (None, "live_data", "code_reader")
-SOURCES = ("analysis", "live_site", "code")
+SOURCES = ("analysis", "live_site", "code", "team_finding", "suggestion")
 GUARD_MESSAGE = "The assistant can only read."
 PERMISSION_MESSAGE = "You don't have permission for that."
 
@@ -81,6 +91,10 @@ TOOLS = {
 		knowledge.search_knowledge, knowledge.SEARCH_KNOWLEDGE_SCHEMA, None, "analysis"
 	),
 	# meta and permission facts, no business data (check_my_access with a docname needs Live data inside the guard)
+	"search_findings": _entry(
+		findings.search_findings, findings.SEARCH_FINDINGS_SCHEMA, None, "team_finding"
+	),
+	"suggest_finding": _entry(findings.suggest_finding, findings.SUGGEST_FINDING_SCHEMA, None, "suggestion"),
 	"get_screen_help": _entry(live.get_screen_help, live.GET_SCREEN_HELP_SCHEMA, None, "live_site"),
 	"check_my_access": _entry(live.check_my_access, live.CHECK_MY_ACCESS_SCHEMA, None, "live_site"),
 	"find_records": _entry(live.find_records, live.FIND_RECORDS_SCHEMA, "live_data", "live_site"),

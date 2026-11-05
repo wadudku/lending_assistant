@@ -67,7 +67,7 @@ ALLOWED = {
 	"write": OWN_WRITERS,
 	"ignore-permissions": OWN_WRITERS,
 	"get-doc": (*OWN_WRITERS, GUARD, "assistant/settings.py"),
-	"get-list": (GUARD, "api/chat.py", "api/gate.py"),
+	"get-list": (GUARD, "api/chat.py", "api/gate.py", "assistant/tools/findings.py"),
 	"db-read": ("install.py",),
 	"txn-control": (GUARD,),
 	"callbacks": (GUARD,),  # frappe.db.before/after_commit/rollback and their _functions
@@ -213,6 +213,7 @@ _PLAIN_IMPORTS = {
 	"assistant/orchestrator.py": ("time",),
 	"assistant/finding_rules.py": ("json", "re"),
 	"assistant/findings.py": ("json",),
+	"assistant/tools/findings.py": ("re",),
 }
 _FROM_IMPORTS = {
 	GUARD: (
@@ -279,6 +280,7 @@ APP_API = {
 	f"{ASSISTANT}.tools.live": set(),
 	f"{ASSISTANT}.tools.code": set(),
 	f"{ASSISTANT}.tools.dues": set(),
+	f"{ASSISTANT}.tools.findings": set(),
 	f"{ASSISTANT}.tools.registry": set(),
 	f"{ASSISTANT}.prompts": set(),
 	f"{ASSISTANT}.trace": set(),
@@ -414,6 +416,24 @@ APP_GRANTS = [
 	(f"{ASSISTANT}.ratelimit", "IP_PREFIX", ("api/chat.py",), False),
 	(f"{ASSISTANT}.ratelimit", "FEEDBACK_PREFIX", ("api/chat.py",), False),
 	# M6: team findings
+	*[
+		(f"{ASSISTANT}.tools.findings", name, ("assistant/tools/registry.py",), False)
+		for name in ("search_findings", "suggest_finding", "SEARCH_FINDINGS_SCHEMA", "SUGGEST_FINDING_SCHEMA")
+	],
+	*[
+		(f"{ASSISTANT}.finding_rules", name, ("assistant/tools/findings.py",), False)
+		for name in (
+			"lines",
+			"canonical_br_id",
+			"check_br_ids",
+			"check_doctypes",
+			"stale_reasons",
+			"bridge_verdicts",
+		)
+	],
+	*[(f"{ASSISTANT}.guard", name, ("assistant/tools/findings.py",), False) for name in ("unwrap", "fit")],
+	(f"{ASSISTANT}.trace", "suggestion_from", ("assistant/orchestrator.py",), False),
+	(f"{ASSISTANT}.trace", "has_results", ("assistant/orchestrator.py",), False),
 	*[
 		(f"{ASSISTANT}.finding_rules", name, ("**/doctype/",), False)
 		for name in ("check_br_ids", "check_doctypes", "parse_json_list", "stale_reasons")

@@ -56,7 +56,7 @@ class TestAskWiring(AskCase):
 			dispatch=lambda n, a=None: registry_ok(),
 			route="Form/Loan/AST-L-1", depth="Technical", deep=1,
 		)  # fmt: skip
-		self.assertEqual(set(result), {"conversation", "message", "answer", "status", "labels"})
+		self.assertEqual(set(result), {"conversation", "message", "answer", "status", "labels", "suggestion"})
 		row = self.row(result["message"])
 		self.assertEqual(
 			(row.status, row.model, row.depth, row.deep), ("ok", "claude-opus-5-5", "Technical", 1)

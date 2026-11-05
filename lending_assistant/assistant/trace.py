@@ -111,6 +111,12 @@ def records_from(tool: str, content: str) -> list[dict]:
 			for r in rows
 			if isinstance(r, dict) and r.get("name")
 		]
+	if tool == "search_findings":
+		return [
+			{"doctype": "Assistant Finding", "name": r["name"]}
+			for r in payload.get("results") or []
+			if isinstance(r, dict) and r.get("name")
+		]
 	if tool == "get_loan_dues" and payload.get("loan"):
 		return [
 			{"doctype": "Loan", "name": payload["loan"]},
@@ -152,6 +158,25 @@ def cards_from(tool: str, content: str) -> list[dict]:
 		for c in cards
 		if isinstance(c, dict) and c.get("id")
 	]
+
+
+def suggestion_from(tool: str, content: str):
+	"""The cleaned suggestion that `suggest_finding` echoed (title, summary, br_ids, doctypes, sources), or None. It comes
+	from the tool result, never from the model's own arguments."""
+	payload = _payload(content)
+	if tool != "suggest_finding" or not isinstance(payload, dict):
+		return None
+	found = payload.get("suggestion")
+	keys = ("title", "summary", "br_ids", "doctypes", "sources")
+	if isinstance(found, dict) and all(k in found for k in keys):
+		return {k: found[k] for k in keys}
+	return None
+
+
+def has_results(content: str) -> bool:
+	"""True when a result envelope holds at least one row (`count` above 0)."""
+	payload = _payload(content)
+	return isinstance(payload, dict) and bool(payload.get("count"))
 
 
 def web_sources_from(content) -> list[dict]:

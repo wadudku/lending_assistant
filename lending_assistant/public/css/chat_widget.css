@@ -341,3 +341,10 @@
 		align-self: stretch;
 	}
 }
+
+/* M6: Save as finding */
+.ast-finding { margin-top: 6px; font-size: var(--text-sm, 12px); }
+.ast-finding-save { border: 1px solid var(--border-color, #d1d8dd); background: var(--control-bg, #f3f3f3); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.ast-finding-save:hover { background: var(--bg-gray, #e8e8e8); }
+.ast-finding-saved { color: var(--text-muted, #6c7680); }
+.ast-finding-saved a { margin-left: 2px; }

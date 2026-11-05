@@ -13,6 +13,14 @@ from frappe import _
 from lending_assistant.api import gate
 from lending_assistant.assistant import audit, orchestrator, prompts, ratelimit
 
+LABEL_WORDS = (
+	"Analysis",
+	"Team finding",
+	"Live site",
+	"Code",
+	"General knowledge",
+	"Web",
+)  # prompts.LABEL_WORDS
 HISTORY_TURNS = 4  # earlier exchanges of the same conversation that the model sees (as plain text)
 
 MAX_QUESTION = 4000
@@ -60,6 +68,9 @@ def ask(question=None, conversation=None, route=None, depth="Both", deep=0):
 		deep=deep,
 		history=history,
 	)
+	suggestion = (
+		outcome.get("suggestion") if outcome["status"] == "ok" else None
+	)  # no button on a partial answer
 	message = audit.log_exchange(
 		conversation,
 		question=question,
@@ -80,6 +91,7 @@ def ask(question=None, conversation=None, route=None, depth="Both", deep=0):
 		code_files_read=outcome["code_files_read"],
 		cards_used=outcome["cards_used"],
 		web_sources=outcome["web_sources"],
+		finding_suggestion=_stored_suggestion(suggestion, outcome),
 	)
 	return {
 		"conversation": conversation,
@@ -89,6 +101,9 @@ def ask(question=None, conversation=None, route=None, depth="Both", deep=0):
 		"labels": prompts.find_labels(
 			outcome["answer"]
 		),  # additive; the panel never depends on it (history has none)
+		"suggestion": (
+			{k: suggestion[k] for k in ("title", "summary", "br_ids", "doctypes")} if suggestion else None
+		),
 	}
 
 
@@ -156,6 +171,28 @@ def _validate(question, route, depth, deep):
 		frappe.throw(_("Deep must be 0 or 1."))
 
 	return question, route, depth, deep
+
+
+def _stored_suggestion(suggestion, outcome):
+	"""What `findings.save` will build the finding from (G13): the suggestion, the label words found in the answer, and the
+	cards the answer relied on (those the model read with get_card; all of the turn when it read none)."""
+	if not suggestion:
+		return None
+	cards = outcome.get("cards_used") or []
+	read = [c for c in cards if c.get("via") == "get_card"]
+	basis = "read" if read else "all"
+	return {
+		"title": suggestion["title"],
+		"summary": suggestion["summary"],
+		"br_ids": suggestion["br_ids"],
+		"doctypes": suggestion["doctypes"],
+		"model_sources": suggestion["sources"],
+		"labels": [
+			label[1:-1] for label in prompts.find_labels(outcome["answer"]) if label[1:-1] in LABEL_WORDS
+		],
+		"cards": [{"id": c["id"], "version": c.get("version")} for c in (read or cards)][:30],
+		"cards_basis": basis,
+	}
 
 
 def _split_route(route: str):

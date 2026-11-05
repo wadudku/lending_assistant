@@ -336,7 +336,8 @@ def _loop(turn, call, messages, max_rounds) -> dict:
 
 
 def _api_error(exc) -> _Stop:
-	"""A generic reply per error class. Nothing from the exception (text, headers, body, class name) is kept."""
+	"""A generic reply per error class. Logs only the HTTP status and the API error type (safe tokens): never the message, headers, body or class name."""
+	status, api_type = 0, ""
 	if isinstance(exc, anthropic.AuthenticationError | anthropic.PermissionDeniedError):
 		kind = "auth"
 	elif isinstance(exc, anthropic.RateLimitError):
@@ -345,12 +346,29 @@ def _api_error(exc) -> _Stop:
 		kind = "timeout"
 	elif isinstance(exc, anthropic.APIConnectionError):
 		kind = "connection"
+	elif isinstance(exc, anthropic.BadRequestError):
+		kind = "bad_request"
 	elif isinstance(exc, anthropic.APIStatusError):
 		kind = "server"
 	else:
 		kind = "other"
-	_log("api_error", kind=kind)
+	if isinstance(exc, anthropic.APIStatusError):
+		status, api_type = _status_and_type(exc)
+	_log("api_error", kind=kind, http=status or "none", api_type=api_type or "none")
 	return _Stop("error", prompts.MESSAGES["auth" if kind == "auth" else "error"])
+
+
+def _status_and_type(exc) -> tuple[int, str]:
+	"""(HTTP status, API error type) of a status error. The type is kept only if it is a plain token."""
+	try:
+		status, body = exc.status_code, exc.body
+	except AttributeError:  # an error built without a response
+		status, body = 0, None
+	status = status if isinstance(status, int) else 0
+	body = body if isinstance(body, dict) else {}
+	error = body.get("error") if isinstance(body.get("error"), dict) else {}
+	api_type = error.get("type") if isinstance(error.get("type"), str) else ""
+	return status, (api_type if api_type.replace("_", "").isalnum() else "")
 
 
 def run(question, *, route_doctype="", route_docname="", depth="Both", deep=0, history=None) -> dict:

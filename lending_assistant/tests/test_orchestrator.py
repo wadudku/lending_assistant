@@ -548,6 +548,28 @@ class TestErrorsAndStub(OrchTestCase):
 				self.assertEqual((result["status"], result["answer"]), ("error", reply))
 				self.assertNotIn(cf.FAKE_KEY, json.dumps(result, default=str))
 
+	def test_a_400_is_bad_request_and_logs_only_status_and_error_type(self):
+		class Bad(anthropic.BadRequestError):
+			def __init__(self):
+				Exception.__init__(self, "bad schema " + cf.FAKE_KEY)
+				self.status_code = 400
+				self.body = {"error": {"type": "invalid_request_error", "message": "secret " + cf.FAKE_KEY}}
+
+		with mock.patch.object(orchestrator, "_log") as log:
+			result, _ = self.go([Bad()])
+		self.assertEqual((result["status"], result["answer"]), ("error", prompts.MESSAGES["error"]))
+		log.assert_any_call("api_error", kind="bad_request", http=400, api_type="invalid_request_error")
+		self.assertNotIn(cf.FAKE_KEY, repr(log.call_args_list))
+
+	def test_a_status_error_without_a_response_still_logs_a_kind(self):
+		class Server(anthropic.InternalServerError):
+			def __init__(self):
+				Exception.__init__(self, "boom")
+
+		with mock.patch.object(orchestrator, "_log") as log:
+			self.go([Server()])
+		log.assert_any_call("api_error", kind="server", http="none", api_type="none")
+
 	def test_the_client_is_built_with_an_explicit_base_url(self):
 		with mock.patch.object(orchestrator.anthropic, "Anthropic") as ctor:
 			REAL_MAKE_CLIENT("k")

@@ -154,12 +154,17 @@ frappe.provide("lending_assistant");
 		}
 	}
 
-	// showdown turns word_with_underscores into emphasis ("howto.loan_repayment" loses its underscore). Card ids and
-	// field names are full of them, so escape a mid-word underscore outside code, links and URLs before parsing.
+	// showdown turns word_with_underscores into emphasis, and escaping with a backslash shows up literally where
+	// showdown keeps backslashes verbatim. So: in plain text, escape every underscore of any token that contains one
+	// ("__init__", "x__y__z", "howto.loan_repayment"; "_word_" emphasis is given up, the prompt uses "*"). Parts that
+	// must stay verbatim are split out first: fences of 3+ backticks or tildes, inline code, indented code lines,
+	// reference definitions, "](url)", <autolinks>, http(s) URLs and www. URLs.
 	function protect_underscores(md) {
+		const verbatim =
+			/((?:`{3,}|~{3,})[\s\S]*?(?:`{3,}|~{3,})|`[^`\n]*`|^(?: {4}|\t).*$|^ {0,3}\[[^\]]+\]:.*$|\]\([^)\s]*\)|<[^<>\s]+>|https?:\/\/\S+|www\.\S+)/m;
 		return md
-			.split(/(```[\s\S]*?```|`[^`\n]*`|\]\([^)\s]*\)|https?:\/\/\S+)/)
-			.map((part, i) => (i % 2 ? part : part.replace(/(\w)_(?=\w)/g, "$1\\_")))
+			.split(new RegExp(verbatim.source, "gm"))
+			.map((part, i) => (i % 2 ? part : part.replace(/[\w.]*_[\w.]*/g, (t) => t.replace(/_/g, "\\_"))))
 			.join("");
 	}
 

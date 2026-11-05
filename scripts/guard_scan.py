@@ -179,12 +179,12 @@ APP_API = {
 	f"{ASSISTANT}.ratelimit": set(),
 	f"{PACKAGE}.install": set(),
 	# M3b knowledge base: pure functions over the ingested files. Only names that some module imports are listed.
-	f"{PACKAGE}.kb.store": {"CARD_ID", "TYPES", "parse_front_matter", "reset_cache", "load"},
+	f"{PACKAGE}.kb.store": {"CARD_ID", "TYPES", "parse_front_matter", "reset_cache", "load", "get_card"},
 	f"{PACKAGE}.kb.lookup": {
 		"norm_term", "vocabulary", "normalise_br_id", "normalise_journey", "normalise_dev_item", "normalise_doctype",
-		"score_keys", "rank",
+		"score_keys", "rank", "lookup",
 	},
-	f"{PACKAGE}.kb.search": {"bm25_scores"},
+	f"{PACKAGE}.kb.search": {"bm25_scores", "search"},
 }  # fmt: skip
 # (module, name, files, reserved): extra names for particular files. `reserved` grants are for code that does not exist
 # yet (M4); they are exempt from the dead-entry check and a test shows they work only in their file.
@@ -192,7 +192,8 @@ APP_GRANTS = [
 	(f"{ASSISTANT}.guard", "require_doctype", ("assistant/access.py",), False),
 	(f"{ASSISTANT}.guard", "check_actions", ("assistant/access.py",), False),
 	(f"{ASSISTANT}.guard", "SOURCE_LIVE", ("assistant/access.py",), False),
-	(f"{ASSISTANT}.guard", "fit", ("assistant/codereader.py",), False),
+	(f"{ASSISTANT}.guard", "fit", ("assistant/codereader.py", "assistant/tools/knowledge.py"), False),
+	(f"{ASSISTANT}.guard", "MAX_CHARS", ("assistant/tools/knowledge.py",), False),
 	(f"{ASSISTANT}.guard", "AssistantRefused", ("assistant/codereader.py",), False),
 	(f"{ASSISTANT}.settings", "get_api_key", ("assistant/orchestrator.py",), True),
 	(f"{ASSISTANT}.audit", "CONVERSATION", ("api/chat.py",), False),

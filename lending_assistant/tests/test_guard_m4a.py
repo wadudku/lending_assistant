@@ -41,3 +41,53 @@ class TestR21Note(GuardTestCase):
 		self.assertIn("skips nothing", " ".join(doc.split()))
 		self.assertIn("step 2 or step 3", " ".join(doc.split()))
 		self.assertNotIn("raised by steps 1-3", " ".join(doc.split()))
+
+
+class TestOwnerAndModifiedByAreNeverReadable(GuardTestCase):
+	"""#39: who created or last changed a record is never shown, for any doctype, parent or child."""
+
+	def allowlisted(self):
+		return [row.allowed_doctype for row in frappe.get_doc("Assistant Settings").doctype_allowlist]
+
+	def test_readable_fields_drops_both_for_every_allowlisted_doctype_and_its_children(self):
+		doctypes = self.allowlisted()
+		self.assertGreater(len(doctypes), 5)
+		checked_children = 0
+		for who in ("senior", "dev", "limited"):
+			self.as_user(who)
+			for doctype in doctypes:
+				with self.subTest(who=who, doctype=doctype):
+					fields = guard.readable_fields(doctype)
+					self.assertNotIn("owner", fields)
+					self.assertNotIn("modified_by", fields)
+					for df in frappe.get_meta(doctype).get_table_fields():
+						child = guard.readable_fields(df.options, parenttype=doctype)
+						checked_children += 1
+						self.assertNotIn("owner", child)
+						self.assertNotIn("modified_by", child)
+		self.assertGreater(checked_children, 5)
+
+	def test_a_record_and_its_child_rows_carry_neither(self):
+		visible, _hidden = self.loan_names()
+		for who in ("senior", "dev", "limited"):
+			self.as_user(who)
+			with self.subTest(who=who):
+				data = guard.unwrap(guard.read_doc("Loan", visible))
+				self.assertNotIn("owner", data["data"])
+				self.assertNotIn("modified_by", data["data"])
+				self.assertIn("loan_product", data["data"])
+				for rows in data["children"].values():
+					for row in rows:
+						self.assertNotIn("owner", row)
+						self.assertNotIn("modified_by", row)
+
+	def test_asking_for_them_as_a_field_filter_or_order_is_refused(self):
+		self.as_user("senior")
+		for column in ("owner", "modified_by"):
+			with self.subTest(column=column):
+				with self.assertRaises(frappe.ValidationError):
+					guard.list_records("Loan", fields=["name", column])
+				with self.assertRaises(frappe.ValidationError):
+					guard.list_records("Loan", filters={column: "Administrator"})
+				with self.assertRaises(frappe.ValidationError):
+					guard.list_records("Loan", order_by=f"{column} asc")

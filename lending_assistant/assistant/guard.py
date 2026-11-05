@@ -47,6 +47,7 @@ ORDER_BY = re.compile(r"^(\w+) (asc|desc)$", re.IGNORECASE)
 FIELDNAME = re.compile(r"^\w+$")
 _MARKER = re.compile(r"<(\s*/?\s*data)\b", re.IGNORECASE)
 _CHILD_LINK_FIELDS = ("parent", "parenttype", "parentfield")
+_WHO_FIELDS = ("owner", "modified_by")  # who created / last changed a record: never shown, for any doctype (#39)
 
 
 class AssistantGuardError(Exception):
@@ -556,14 +557,15 @@ def _never_send(doctype: str) -> set[str]:
 
 
 def readable_fields(doctype: str, parenttype: str | None = None) -> list[str]:
-	"""Field names the session user may see: permlevel (G3), minus never-send, minus Password fields (#33)."""
+	"""Field names the session user may see: permlevel (G3), minus never-send, minus Password fields (#33), minus
+	`owner` and `modified_by` for every doctype, parent and child (#39)."""
 	meta = frappe.get_meta(doctype)  # AST-ALLOWED: field filtering needs the meta; it never leaves this module
 	permitted = get_permitted_fields(
 		doctype, parenttype=parenttype, user=frappe.session.user, ignore_virtual=True
 	)
 	blocked = _never_send(doctype) | {df.fieldname for df in meta.fields if df.fieldtype == "Password"}
 	valid = set(meta.get_valid_columns())
-	skip = _CHILD_LINK_FIELDS if parenttype else ()
+	skip = (*_CHILD_LINK_FIELDS, *_WHO_FIELDS) if parenttype else _WHO_FIELDS
 	fields = []
 	for fieldname in permitted:
 		if (

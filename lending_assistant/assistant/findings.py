@@ -24,12 +24,15 @@ def _author_name() -> str:
 	return name if name and "@" not in name else NO_NAME
 
 
-def _exists(name) -> bool:
+def _is_link_of(name, message_name) -> bool:
+	"""True when the finding `name` exists and was saved from this message. A locking read (`for_update=True`) sees the
+	latest committed row, not this request's snapshot, so a finding committed by a concurrent save is found (M6-R1). A
+	reused name that belongs to another message does not count (M6-R3)."""
 	try:
-		frappe.get_doc(FINDING, name)  # AST-ALLOWED: exists?
+		doc = frappe.get_doc(FINDING, name, for_update=True)  # AST-ALLOWED: exists?
 	except frappe.DoesNotExistError:
 		return False
-	return True
+	return doc.source_message == message_name
 
 
 def create_from_message(message_name: str, title, summary, lending_version: str) -> dict:
@@ -37,14 +40,13 @@ def create_from_message(message_name: str, title, summary, lending_version: str)
 
 	A second call for a message that already has a finding returns that finding. A message whose finding was deleted counts
 	as not saved: the link is cleared and a new finding is made."""
-	# Row lock (for_update), so a double click is serialised. Ownership was checked by the caller.
 	# Row lock (for_update): a double click is serialised. Ownership was checked by the caller.
 	msg = frappe.get_doc(audit.MESSAGE, message_name, for_update=True)  # AST-ALLOWED: own message
 	if msg.user != frappe.session.user:
 		frappe.throw(NOT_FOUND, frappe.DoesNotExistError)
 
 	if msg.finding:
-		if _exists(msg.finding):
+		if _is_link_of(msg.finding, msg.name):
 			return {"finding": msg.finding, "title": None, "created": False}
 		msg.db_set("finding", "", update_modified=False)  # AST-ALLOWED: clear dead link
 

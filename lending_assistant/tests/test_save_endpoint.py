@@ -167,6 +167,38 @@ class TestSaveFlow(SaveCase):
 		self.assertTrue(again["created"])
 		self.assertTrue(frappe.db.exists("Assistant Finding", again["finding"]))
 
+	def test_the_existing_finding_is_read_with_a_row_lock(self):
+		"""M6-R1: a plain (snapshot) read cannot see a finding that a concurrent save committed; the locking read can.
+		A second connection cannot be used here (the message is uncommitted in the test transaction), so the test pins the
+		locking read; tools/m6_concurrency_check.py proves it over HTTP."""
+		message = self.make_message()
+		first = findings.save(message)
+		real = frappe.get_doc
+		seen = []
+
+		def spy(*args, **kwargs):
+			if args and args[0] == "Assistant Finding":
+				seen.append(kwargs.get("for_update"))
+			return real(*args, **kwargs)
+
+		with mock.patch.object(frappe, "get_doc", side_effect=spy):
+			second = findings.save(message)
+		self.assertEqual(second, {"finding": first["finding"], "title": None, "created": False})
+		self.assertEqual(seen, [True])
+
+	def test_a_reused_name_of_another_message_is_not_this_messages_finding(self):
+		"""M6-R3: the link of message A points to a finding that now belongs to message B (a reused name)."""
+		a = self.make_message()
+		b = self.make_message()
+		other = findings.save(b)["finding"]
+		frappe.get_doc("Assistant Message", a).db_set("finding", other, update_modified=False)
+		result = findings.save(a)
+		self.assertTrue(result["created"])
+		self.assertNotEqual(result["finding"], other)
+		self.assertEqual(frappe.db.get_value("Assistant Finding", result["finding"], "source_message"), a)
+		self.assertEqual(frappe.db.get_value("Assistant Finding", other, "source_message"), b)
+		self.assertEqual(frappe.db.get_value("Assistant Message", b, "finding"), other)
+
 	def test_an_invalid_stored_reference_fails_in_the_controller(self):
 		bad = dict(SUGGESTION, br_ids=["BR-LMS-9999"])
 		message = self.make_message(suggestion=bad)

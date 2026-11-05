@@ -38,7 +38,7 @@ class TestR21Note(GuardTestCase):
 	def test_the_docstring_says_where_a_baseexception_really_skips_steps(self):
 		doc = guard.read_only_tool_context.__wrapped__.__doc__
 		self.assertIn("step 1 runs inside a", " ".join(doc.lower().split()))
-		self.assertIn("skips nothing", " ".join(doc.split()))
+		self.assertIn("skips only step 5 (the violation log) and the final raise", " ".join(doc.split()))
 		self.assertIn("step 2 or step 3", " ".join(doc.split()))
 		self.assertNotIn("raised by steps 1-3", " ".join(doc.split()))
 

@@ -378,7 +378,8 @@ def read_only_tool_context(tool: str = ""):
 	or could not be, or if the savepoint was gone.
 
 	Not covered: a `BaseException` that is not an `Exception` (KeyboardInterrupt, SystemExit). Step 1 runs inside a
-	`try ... finally` whose `finally` holds steps 2-4, so a `BaseException` raised in step 1 skips nothing. One raised
+	`try ... finally` whose `finally` holds steps 2-4, so a `BaseException` raised in step 1 skips only step 5 (the
+	violation log) and the final raise. One raised
 	in step 2 or step 3 is not caught by their `except Exception`: it skips the rest of the block (the savepoint
 	rollback, the violation log and the AssistantGuardError), and only the `finally` of step 4 runs (flag, transaction
 	control and write counter reset; the savepoint stays open until the request's own rollback). A COMMIT that
@@ -482,6 +483,20 @@ def read_only_tool_context(tool: str = ""):
 			)
 
 
+def _adopt_cold_connection(snap: dict) -> None:
+	"""If the request's own connection object has opened its socket since `snap` was taken, record that socket.
+
+	Only the socket and cursor are taken from a new capture, and only when `frappe.local.db` is still the same object.
+	The user, session, flags and site stay as they were on entry.
+	"""
+	try:
+		now = _capture_identity()
+	except Exception:
+		return  # nothing to compare with: the restore below reports it
+	if now["db"] is snap["db"] and now["conn"] is not None:
+		snap["conn"], snap["cursor"] = now["conn"], now["cursor"]
+
+
 @contextmanager
 def identity_watch(tool: str = ""):
 	"""The dispatcher's own identity check (#48), around everything it runs for one tool call.
@@ -493,9 +508,14 @@ def identity_watch(tool: str = ""):
 	and the return, and it still works if the context is replaced by something that does not check.
 	"""
 	identity = _capture_identity()
+	cold = identity["conn"] is None  # M4a-R1: no connection was open on entry
 	try:
 		yield
 	finally:
+		if cold:
+			# A connection that was first opened during the call is not a swap (the same rule as the context, M2b-R13).
+			# The context inside has already re-captured and guarded it, so adopt it as the one to compare with.
+			_adopt_cold_connection(identity)
 		try:
 			changed = _restore_identity(identity)
 		except Exception:

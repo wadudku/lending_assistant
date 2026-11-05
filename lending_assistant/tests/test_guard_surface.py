@@ -64,14 +64,17 @@ class TestPlainDataSurface(GuardTestCase):
 			"check_actions": lambda: guard.check_actions("Loan", ["read", "submit"]),
 			"block_if_read_only": lambda: guard.block_if_read_only(),
 			"read_only_tool_context": None,  # a context manager: the yielded object is checked below
+			"identity_watch": None,  # a context manager that yields nothing
 		}
 		result["access"] = {
 			"check_my_access": lambda: access.check_my_access("Loan", ["read"], visible),
 			"roles_that_can": lambda: access.roles_that_can("Loan", "submit"),
+			"describe_doctype": lambda: access.describe_doctype("Loan", "product"),
 		}
 		result["codereader"] = {
 			"read": lambda: codereader.read("lending/lending/hooks.py", 1, 3),
 			"search": lambda: codereader.search("hooks"),
+			"controller_path": lambda: codereader.controller_path("Loan Management", "Loan"),
 		}
 		return result
 
@@ -97,6 +100,12 @@ class TestPlainDataSurface(GuardTestCase):
 						continue
 					with guard.read_only_tool_context("AST-TEST-surface"):
 						assert_plain(self, call(), f"{module_name}.{name}()")
+
+	def test_the_identity_watch_yields_nothing_so_no_live_object_leaves_guard(self):
+		self.as_user("senior")
+		with guard.identity_watch("AST-TEST-surface") as yielded:
+			pass
+		self.assertIsNone(yielded)
 
 	def test_the_context_object_holds_plain_values_only(self):
 		self.as_user("senior")

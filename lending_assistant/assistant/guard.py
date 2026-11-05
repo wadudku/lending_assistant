@@ -42,7 +42,8 @@ MAX_FIELDS = 30
 MAX_NAME_LENGTH = 140
 SHORTEN_TO = 300  # first step when a result is too big: cut long strings to this many characters
 
-OPERATORS = ("=", "!=", "<", ">", "<=", ">=", "like", "in", "between", "is")
+OPERATORS = ("=", "!=", "<", ">", "<=", ">=", "like", "in", "not in", "between", "is")
+MAX_FILTERS = 10
 ORDER_BY = re.compile(r"^(\w+) (asc|desc)$", re.IGNORECASE)
 FIELDNAME = re.compile(r"^\w+$")
 _MARKER = re.compile(r"<(\s*/?\s*data)\b", re.IGNORECASE)
@@ -424,6 +425,31 @@ def read_only_tool_context(tool: str = ""):
 			)
 
 
+@contextmanager
+def identity_watch(tool: str = ""):
+	"""The dispatcher's own identity check (#48), around everything it runs for one tool call.
+
+	On entry it records who and what the request is: `frappe.local.db` (the object, not the proxy), the session, the
+	user and sid, the flags and the site. On exit it compares, puts back whatever differs, logs it (counts only) and
+	raises AssistantGuardError. It yields nothing: the recorded objects stay inside this module (plain data surface).
+	The read-only context does the same check around the tool itself; this one also covers the code between the context
+	and the return, and it still works if the context is replaced by something that does not check.
+	"""
+	identity = _capture_identity()
+	try:
+		yield
+	finally:
+		try:
+			changed = _restore_identity(identity)
+		except Exception:
+			changed = ["identity could not be restored"]
+		if changed:
+			ctx = ReadOnlyContext(tool)
+			ctx.identity_changes = changed
+			_log_violation(ctx)
+			raise AssistantGuardError("identity or connection changed during the tool call: " + ", ".join(changed))
+
+
 def _log_violation(ctx: ReadOnlyContext):
 	"""Counts and the tool name only: never record data."""
 	summary = ctx.summary()
@@ -659,22 +685,37 @@ def read_doc(doctype, name) -> str:
 # --- list_records ---------------------------------------------------------------------------------------------
 
 
-def _check_filters(filters, allowed: set[str]) -> dict:
+def _check_filters(filters, allowed: set[str]) -> list:
+	"""Filters as a dict (`{field: value}` or `{field: [operator, value]}`, one condition per field) or as a list of
+	`[field, operator, value]` conditions (the same field may appear more than once, for example two date bounds).
+	Returns the list form, which `frappe.get_list` takes as it is. At most MAX_FILTERS conditions."""
 	if filters is None:
-		return {}
-	if not isinstance(filters, dict):
-		raise frappe.ValidationError("Filters must be a dict of field: value or field: [operator, value].")
-	clean = {}
-	for field, spec in filters.items():
-		if field not in allowed:
+		return []
+	if isinstance(filters, dict):
+		conditions = []
+		for field, spec in filters.items():
+			if isinstance(spec, list | tuple):
+				if len(spec) != 2:
+					raise frappe.ValidationError("A filter operator is not allowed.")
+				conditions.append([field, spec[0], spec[1]])
+			else:
+				conditions.append([field, "=", spec])
+	elif isinstance(filters, list | tuple):
+		conditions = [list(item) if isinstance(item, list | tuple) else item for item in filters]
+	else:
+		raise frappe.ValidationError("Filters must be a dict of field: value or a list of [field, operator, value].")
+	if len(conditions) > MAX_FILTERS:
+		raise frappe.ValidationError(f"At most {MAX_FILTERS} filters.")
+	clean = []
+	for condition in conditions:
+		if not isinstance(condition, list) or len(condition) != 3:
+			raise frappe.ValidationError("A filter must be [field, operator, value].")
+		field, op, value = condition
+		if not isinstance(field, str) or field not in allowed:
 			raise frappe.ValidationError("A filter uses a field that is not available.")
-		if isinstance(spec, list | tuple):
-			if len(spec) != 2 or spec[0] not in OPERATORS:
-				raise frappe.ValidationError("A filter operator is not allowed.")
-			op, value = spec[0], spec[1]
-		else:
-			op, value = "=", spec
-		clean[field] = [op, _check_filter_value(op, value)]
+		if op not in OPERATORS:
+			raise frappe.ValidationError("A filter operator is not allowed.")
+		clean.append([field, op, _check_filter_value(op, value)])
 	return clean
 
 
@@ -693,7 +734,7 @@ def _check_filter_value(op: str, value):
 		if not isinstance(value, str) or len(value) > 100:
 			raise frappe.ValidationError("A like filter needs a short text.")
 		return value
-	if op == "in":
+	if op in ("in", "not in"):
 		if not isinstance(value, list | tuple) or not 0 < len(value) <= 50:
 			raise frappe.ValidationError("An in filter needs a list of 1 to 50 values.")
 		return [_scalar(v) for v in value]

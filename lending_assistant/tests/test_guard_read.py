@@ -189,7 +189,7 @@ class TestListRecords(GuardTestCase):
 		for filters in (
 			{"name; drop": "x"},
 			{"name": ["sleep", 5]},
-			{"name": ["not in", ["a"]]},
+			{"name": ["not in", "abc"]},
 			{"name": ["like", ["a"]]},
 			{"name": ["in", "abc"]},
 			{"name": ["between", [1]]},

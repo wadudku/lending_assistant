@@ -7,7 +7,7 @@ widget are hints at most: they never decide who the user is or what they may do 
 
 import frappe
 
-from lending_assistant.assistant import guard
+from lending_assistant.assistant import codereader, guard, settings
 
 ACTIONS = ("read", "create", "write", "submit", "cancel", "delete")
 
@@ -50,4 +50,59 @@ def roles_that_can(doctype, action) -> dict:
 		"action": action,
 		"roles": sorted(roles),
 		"owner_only_roles": sorted(owner_only - roles),
+	}
+
+
+LAYOUT_FIELDTYPES = frozenset(
+	{"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading", "Fold", "Image", "Table Break"}
+)
+LINK_FIELDTYPES = ("Link", "Table", "Table MultiSelect")
+DESCRIPTION_CHARS = 160
+SEARCH_CHARS = 100
+
+
+def describe_doctype(doctype, search=None) -> dict:
+	"""Screen help for one doctype, as plain data: the fields the session user may read, the module, the controller
+	path (when the code reader is on) and the doctypes the fields link to (G3, G8).
+
+	Only fields `guard.readable_fields` returns: so no never-send, Password, `owner`, `modified_by` or `_` fields, and
+	nothing above the user's permlevel. Layout and hidden fields are skipped. `search` is a case-insensitive substring of
+	the label or fieldname. A user who cannot read the doctype at all gets a refusal. Works with Live data off: it is
+	meta, not business data.
+	"""
+	guard.require_doctype(doctype)
+	if search is not None and (not isinstance(search, str) or len(search) > SEARCH_CHARS):
+		raise frappe.ValidationError(f"search must be text of at most {SEARCH_CHARS} characters.")
+	if not guard.check_actions(doctype, ["read"])["read"]:
+		raise guard.AssistantRefused("You don't have permission to read that doctype.")
+
+	meta = frappe.get_meta(doctype)  # AST-ALLOWED: field labels and types for screen help; only plain text leaves this function
+	readable = set(guard.readable_fields(doctype))
+	allowed = {row.allowed_doctype for row in settings.get_settings().doctype_allowlist}
+	needle = search.strip().lower() if search else ""
+	fields, linked = [], {}
+	for df in meta.fields:
+		if df.fieldname not in readable or df.fieldtype in LAYOUT_FIELDTYPES or df.hidden:
+			continue
+		if needle and needle not in (df.label or "").lower() and needle not in df.fieldname.lower():
+			continue
+		fields.append(
+			{
+				"fieldname": df.fieldname,
+				"label": df.label,
+				"fieldtype": df.fieldtype,
+				"options": df.options,
+				"reqd": int(bool(df.reqd)),
+				"description": (df.description or "")[:DESCRIPTION_CHARS],
+			}
+		)
+		if df.fieldtype in LINK_FIELDTYPES and df.options:
+			linked[df.options] = {"doctype": df.options, "via_field": df.fieldname, "on_allowlist": df.options in allowed}
+	return {
+		"doctype": doctype,
+		"module": meta.module,
+		"controller_path": codereader.controller_path(meta.module, doctype),
+		"fields": fields,
+		"fields_total": len(fields),
+		"linked_doctypes": list(linked.values()),
 	}

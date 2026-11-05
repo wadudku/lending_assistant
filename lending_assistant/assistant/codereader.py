@@ -103,6 +103,20 @@ def _resolve(path) -> tuple[str, str, str, str]:
 	return app, root, real, f"{app}/{'/'.join(real_rel)}"
 
 
+def controller_path(module, doctype) -> str | None:
+	"""`<app>/<app>/<module>/doctype/<name>/<name>.py` for a doctype's controller, when the code reader is on and the
+	file is readable under the same sandbox as `read()`; else None. Never says whether any other path exists."""
+	if not settings.get_settings().code_reader or not isinstance(module, str) or not isinstance(doctype, str):
+		return None
+	folder, name = module.lower().replace(" ", "_"), doctype.lower().replace(" ", "_").replace("-", "_")
+	for app in _roots():
+		try:
+			return _resolve(f"{app}/{app}/{folder}/doctype/{name}/{name}.py")[3]
+		except CodeReaderRefused:
+			continue
+	return None
+
+
 def _line(text: str) -> str:
 	text = text.rstrip("\r\n")
 	return text if len(text) <= LINE_CHARS else text[:LINE_CHARS] + "…"

@@ -180,6 +180,11 @@ APP_API = {
 	f"{PACKAGE}.install": set(),
 	# M3b knowledge base: pure functions over the ingested files. Only names that some module imports are listed.
 	f"{PACKAGE}.kb.store": {"CARD_ID", "TYPES", "parse_front_matter", "reset_cache", "load"},
+	f"{PACKAGE}.kb.lookup": {
+		"norm_term", "vocabulary", "normalise_br_id", "normalise_journey", "normalise_dev_item", "normalise_doctype",
+		"score_keys", "rank",
+	},
+	f"{PACKAGE}.kb.search": {"bm25_scores"},
 }  # fmt: skip
 # (module, name, files, reserved): extra names for particular files. `reserved` grants are for code that does not exist
 # yet (M4); they are exempt from the dead-entry check and a test shows they work only in their file.

@@ -525,8 +525,145 @@ class TestResultChecks(ToolTestCase):
 		with mock.patch.object(registry, "_logger") as logger:
 			self.call("get_record", doctype="Loan", name="SECRET-NAME-" + "x" * 300)
 			self.call("nope")
-		lines = [call.args[0] for call in logger.return_value.info.call_args_list]
+		lines = [call.args[0] for call in logger.return_value.warning.call_args_list]
 		self.assertEqual(len(lines), 2)
 		self.assertIn("tool=get_record bad_arguments", lines[0])
 		self.assertIn("unknown_tool", lines[1])
 		self.assertFalse(any("SECRET" in line for line in lines))
+
+
+class TestLoggingEnvelopeAndColdConnection(ToolTestCase):
+	"""Fix-up #149: M4a-R1 (cold connection through dispatch), R2 (the log line is really written), R5 (bad envelope)."""
+
+	def setUp(self):
+		super().setUp()
+		self.as_user("senior")
+		self.rogues = []
+
+	def tearDown(self):
+		for rogue in self.rogues:
+			try:
+				rogue.close()
+			except Exception:
+				pass
+		super().tearDown()
+
+	def run_double(self, function, source="live_site"):
+		with mock.patch.dict(registry.TOOLS, {"AST-TEST-double": self.tool_entry(function, source)}):
+			return registry.dispatch("AST-TEST-double", {})
+
+	def violation_rows(self):
+		return frappe.db.sql(
+			"select count(*) from `tabError Log` where method=%s and error like %s",
+			("AST write blocked", "%tool=AST-TEST-double%"),
+		)[0][0]
+
+	def test_internal_errors_are_logged_at_error_level_without_the_detail(self):
+		def broken():
+			raise RuntimeError("SECRET-DETAIL")
+
+		with mock.patch.object(registry, "_logger") as logger:
+			with self.assertRaises(RuntimeError):
+				self.run_double(broken)
+		self.assertEqual(logger.return_value.warning.call_count, 0)
+		line = logger.return_value.error.call_args.args[0]
+		self.assertIn("tool=AST-TEST-double internal_error", line)
+		self.assertNotIn("SECRET", line)
+
+	def test_a_refusal_really_reaches_the_log_file(self):
+		"""M4a-R2: no mock. Frappe's logger drops `info`, so the line must be written at warning or above."""
+		import logging
+		import os
+
+		logger = registry._logger()
+		self.assertTrue(logger.isEnabledFor(logging.WARNING))
+		files = [h.baseFilename for h in logger.handlers if hasattr(h, "baseFilename")]
+		self.assertTrue(files, "the logger has no file handler")
+		marker = f"user={frappe.session.user} tool=get_record bad_arguments"
+
+		def count():
+			for handler in logger.handlers:
+				handler.flush()
+			return open(files[0]).read().count(marker) if os.path.exists(files[0]) else 0
+
+		before = count()
+		self.call("get_record", doctype="Loan", name="SECRET-NAME-" + "x" * 300)
+		self.assertEqual(count(), before + 1)
+		self.assertNotIn("SECRET-NAME", open(files[0]).read())
+
+	def test_two_concatenated_envelopes_are_a_guard_failure(self):
+		joined = guard.as_data({"a": 1}) + guard.as_data({"b": 2})
+		with self.assertRaises(guard.AssistantGuardError):
+			self.run_double(lambda: joined)
+
+	def test_an_envelope_with_invalid_json_inside_is_a_guard_failure(self):
+		with self.assertRaises(guard.AssistantGuardError):
+			self.run_double(lambda: '<data source="live_site">{not json</data>')
+
+	def no_query_before_the_watch(self):
+		"""`_switch_message` reads Assistant Settings, which can open the connection before the watch starts."""
+		return mock.patch.object(registry, "_switch_message", return_value=None)
+
+	def cold(self):
+		original = frappe.local.db
+		frappe.connect(set_admin_as_user=False)  # a new Database object that has not opened its connection
+		cold = frappe.local.db
+		self.rogues.append(cold)
+		self.assertIsNone(cold._conn)
+		return original, cold
+
+	def test_a_tool_whose_first_query_is_on_a_cold_connection_is_not_a_swap(self):
+		original, cold = self.cold()
+		try:  # no query here: it would warm the connection
+			with self.no_query_before_the_watch():
+				result = self.run_double(lambda: {"n": frappe.db.sql("select 1")[0][0]})
+			self.assertFalse(result.is_error)
+			self.assertEqual(guard.unwrap(result.content)["n"], 1)
+			self.assertIs(frappe.local.db, cold)
+			self.assertIsNotNone(cold._conn)  # the request's own socket was not closed
+			self.assertEqual(frappe.db.sql("select 2")[0][0], 2)
+		finally:
+			frappe.local.db = original
+		self.assertEqual(self.violation_rows(), 0)  # no false violation row
+
+	def test_check_my_access_on_a_cold_connection_returns_a_result(self):
+		original, _ = self.cold()
+		try:
+			with self.no_query_before_the_watch():
+				result = self.call("check_my_access", doctype="Loan", actions=["read"], docname=None)
+			self.assertFalse(result.is_error)
+		finally:
+			frappe.local.db = original
+
+	def test_a_swap_after_a_warm_connection_still_raises(self):
+		original = frappe.local.db
+		frappe.db.sql("select 1")  # warm
+		self.assertIsNotNone(original._conn)
+
+		def swap():
+			frappe.connect(set_admin_as_user=False)
+			self.rogues.append(frappe.local.db)
+			return {"a": 1}
+
+		try:
+			with self.assertRaises(guard.AssistantGuardError):
+				self.run_double(swap)
+			self.assertIs(frappe.local.db, original)
+		finally:
+			frappe.local.db = original
+
+	def test_a_new_socket_on_the_same_warm_object_still_raises(self):
+		db = frappe.local.db
+		frappe.db.sql("select 1")
+		warm_conn = db._conn
+
+		def new_socket():
+			db._conn = db.get_connection()  # a second socket on the same Database object
+			return {"a": 1}
+
+		try:
+			with self.assertRaises(guard.AssistantGuardError):
+				self.run_double(new_socket)
+			self.assertIs(db._conn, warm_conn)
+		finally:
+			db._conn = warm_conn

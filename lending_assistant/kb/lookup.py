@@ -36,7 +36,7 @@ W_ROUTE_SCREEN = 30
 
 _BR = re.compile(r"^(?:BR[\s_\-]?)?(?:(LMS|LOS|INT|GOV)[\s_\-]?)?(\d{1,3})([a-z])?$", re.I)
 _SECTION = re.compile(r"^(?:(?:section|sec|clause|chapter|brd|para)\s*)?§?\s*(\d{1,2}(?:\.\d{1,2}){0,3})$", re.I)
-_DEV = re.compile(r"^(?:D|dev(?:elopment)?[\s_\-]*item)?[\s_\-]*(\d{1,2})$", re.I)
+_DEV = re.compile(r"^(?:dev(?:elopment)?[\s_\-]*item[\s_\-]*)?D?[\s_\-]*(\d{1,2})$", re.I)
 _JOURNEY = re.compile(r"^(?:J|journey[\s_\-]*J?)[\s_\-]*(\d{1,2})$", re.I)
 _SEP = re.compile(r"[\s_\-]+")
 

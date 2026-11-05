@@ -21,6 +21,13 @@ LABEL_WORDS = (
 	"General knowledge",
 	"Web",
 )  # prompts.LABEL_WORDS
+LABEL_OF_SOURCE = {
+	"analysis": "Analysis",
+	"team_finding": "Team finding",
+	"live_site": "Live site",
+	"code": "Code",
+	"web": "Web",
+}  # prompts.LABEL_OF_SOURCE, without the brackets
 HISTORY_TURNS = 4  # earlier exchanges of the same conversation that the model sees (as plain text)
 
 MAX_QUESTION = 4000
@@ -176,7 +183,7 @@ def _validate(question, route, depth, deep):
 def _source_labels(outcome) -> list:
 	"""The label words of the answer that a source backs (M6-R2): a word counts only when its tool returned data this turn
 	(`label_sources`; an empty findings search is none). `General knowledge` has no tool, so the answer's own word counts."""
-	backed = {prompts.LABEL_OF_SOURCE[s][1:-1] for s in outcome.get("label_sources") or [] if s in prompts.LABEL_OF_SOURCE}
+	backed = {LABEL_OF_SOURCE[s] for s in outcome.get("label_sources") or [] if s in LABEL_OF_SOURCE}
 	return [
 		word
 		for word in (label[1:-1] for label in prompts.find_labels(outcome["answer"]))

@@ -23,6 +23,7 @@ class TestSuggestFinding(ToolTestCase):
 	def test_source_words_equal_the_label_words(self):
 		self.assertEqual(tools.SOURCE_WORDS, prompts.LABEL_WORDS)
 		self.assertEqual(chat.LABEL_WORDS, prompts.LABEL_WORDS)
+		self.assertEqual({k: f"[{v}]" for k, v in chat.LABEL_OF_SOURCE.items()}, prompts.LABEL_OF_SOURCE)
 
 	def test_writes_nothing_and_needs_no_label(self):
 		for who in self.PERSONA_NAMES[:3]:

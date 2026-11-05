@@ -44,7 +44,9 @@ class TestSuggestion(AskCase):
 		row = self.row(result["message"])
 		stored = json.loads(row.finding_suggestion)
 		self.assertEqual(stored["title"], "AST-M6 second")
-		self.assertEqual(stored["labels"], [])  # no tool returned data, so [Analysis] is not a source here (M6-R2)
+		self.assertEqual(
+			stored["labels"], []
+		)  # no tool returned data, so [Analysis] is not a source here (M6-R2)
 		self.assertEqual(stored["model_sources"], ["Analysis"])
 		self.assertEqual(stored["cards_basis"], "all")
 		self.assertFalse(row.finding)
@@ -107,13 +109,20 @@ class TestStoredLabels(AskCase):
 
 	def test_a_search_that_returned_findings_backs_the_label(self):
 		make_finding("dev", title="AST-M6 duplicate payment rule", author_name="Rahim Dev")
-		script = [search("t1"), suggest("t2"), end("[Team finding] (draft, Rahim Dev, today) ok [Analysis] x")]
+		script = [
+			search("t1"),
+			suggest("t2"),
+			end("[Team finding] (draft, Rahim Dev, today) ok [Analysis] x"),
+		]
 		result, _ = self.ask(script, who="senior")
 		stored = json.loads(self.row(result["message"]).finding_suggestion)
 		self.assertEqual(stored["labels"], ["Team finding"])  # [Analysis] had no tool this turn
 
 	def test_the_prompt_tells_the_model_not_to_label_an_empty_search(self):
-		self.assertIn("When search_findings returns no findings, don't use the [Team finding] label", prompts.STABLE_PROMPT)
+		self.assertIn(
+			"When search_findings returns no findings, don't use the [Team finding] label",
+			prompts.STABLE_PROMPT,
+		)
 
 
 class TestTeamFindingLabel(AskCase):

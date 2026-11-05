@@ -81,8 +81,12 @@ class TestChatWidgetSource(unittest.TestCase):
 
 	def test_history_reads_filter_on_the_session_user(self):
 		code = js_code()
-		self.assertEqual(code.count("method: LIST"), 3)  # conversations, messages, and the finding check (M6-R3)
-		self.assertEqual(code.count("user: frappe.session.user"), 2)  # the finding check filters on names, read-perm checked
+		self.assertEqual(
+			code.count("method: LIST"), 3
+		)  # conversations, messages, and the finding check (M6-R3)
+		self.assertEqual(
+			code.count("user: frappe.session.user"), 2
+		)  # the finding check filters on names, read-perm checked
 		self.assertNotIn("frappe.db.", code)
 
 	def test_widget_calls_only_ask_feedback_and_the_client_list_api(self):

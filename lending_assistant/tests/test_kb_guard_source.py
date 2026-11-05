@@ -15,9 +15,13 @@ class TestAnalysisSource(AssistantTestCase):
 		self.assertNotIn("</data>", back["text"])  # neutralised
 
 	def test_unknown_label_is_still_refused(self):
-		for label in ("web", "team_finding", "analysis ", "ANALYSIS", "", None):
+		for label in ("web", "findings", "team_finding ", "analysis ", "ANALYSIS", "", None):
 			with self.subTest(label=label), self.assertRaises(frappe.ValidationError):
 				guard.as_data({"a": 1}, label)
+
+	def test_the_two_m6_sources_wrap_and_unwrap(self):
+		for source in ("team_finding", "suggestion"):
+			self.assertEqual(guard.unwrap(guard.as_data({"a": 1}, source))["source"], source)
 
 	def test_unwrap_refuses_an_unknown_label(self):
 		with self.assertRaises(guard.AssistantGuardError):

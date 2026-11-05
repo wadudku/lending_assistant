@@ -141,6 +141,20 @@ class TestFindingsWidget(unittest.TestCase):
 		b2, e2 = function_span(code, "finding_row")
 		self.assertNotIn("post(", code[b2:e2])
 
+	def test_history_shows_saved_only_for_a_finding_that_exists_and_matches_its_message(self):
+		"""M6-R3: one get_list on Assistant Finding with name and source_message filters; no match = button again."""
+		code = js_code()
+		begin, end = function_span(code, "verify_findings")
+		body = code[begin:end]
+		self.assertEqual(body.count("frappe.call("), 1)
+		self.assertIn("doctype: FINDING", body)
+		self.assertIn('name: ["in"', body)
+		self.assertIn('source_message: ["in"', body)
+		self.assertIn('row.finding = ""', body)
+		self.assertIn('const FINDING = "Assistant Finding";', code)
+		b2, e2 = function_span(code, "open_conversation")
+		self.assertIn("verify_findings(rows", code[b2:e2])
+
 	def test_the_saved_link_is_text_and_a_checked_name(self):
 		code = js_code()
 		begin, end = function_span(code, "saved_row")

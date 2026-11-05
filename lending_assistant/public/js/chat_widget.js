@@ -14,6 +14,7 @@ frappe.provide("lending_assistant");
 	const LIST = "frappe.client.get_list";
 	const CONVERSATION = "Assistant Conversation";
 	const MESSAGE = "Assistant Message";
+	const FINDING = "Assistant Finding";
 	const KB_IMG = "/assets/lending_assistant/kb_img/";
 	const FINDING_ROUTE = "/app/assistant-finding/";
 	const FINDING_NAME = /^AF-\d{5,}$/;
@@ -580,6 +581,32 @@ frappe.provide("lending_assistant");
 		});
 	}
 
+	// "Saved as" only for a finding that still exists AND was saved from this very message (a deleted finding, or a reused name
+	// that now belongs to another message, shows the button again, M6-R3). If the check fails the link is not trusted.
+	function verify_findings(rows, done) {
+		const linked = rows.filter((row) => row.finding);
+		if (!linked.length) return done();
+		frappe.call({
+			method: LIST,
+			type: "GET",
+			args: {
+				doctype: FINDING,
+				filters: { name: ["in", linked.map((row) => row.finding)], source_message: ["in", linked.map((row) => row.name)] },
+				fields: ["name", "source_message"],
+				limit_page_length: linked.length,
+			},
+			callback: function (r) {
+				const ok = new Set(((r && r.message) || []).map((f) => f.name + "|" + f.source_message));
+				for (const row of linked) if (!ok.has(row.finding + "|" + row.name)) row.finding = "";
+				done();
+			},
+			error: function () {
+				for (const row of linked) row.finding = "";
+				done();
+			},
+		});
+	}
+
 	function open_conversation(name) {
 		frappe.call({
 			method: LIST,
@@ -593,14 +620,16 @@ frappe.provide("lending_assistant");
 			},
 			callback: function (r) {
 				const rows = ((r && r.message) || []).slice().reverse();
-				conversation = name;
-				ui.log.replaceChildren();
-				show_view("chat");
-				if (rows.length >= MESSAGE_CAP) add_line("note", __("Older messages are not shown."));
-				for (const row of rows) {
-					add_line("user", row.question || "");
-					add_answer({ message: row.name, answer: row.answer || "", status: row.status, feedback: row.feedback, feedback_comment: row.feedback_comment, finding_suggestion: row.finding_suggestion, finding: row.finding });
-				}
+				verify_findings(rows, () => {
+					conversation = name;
+					ui.log.replaceChildren();
+					show_view("chat");
+					if (rows.length >= MESSAGE_CAP) add_line("note", __("Older messages are not shown."));
+					for (const row of rows) {
+						add_line("user", row.question || "");
+						add_answer({ message: row.name, answer: row.answer || "", status: row.status, feedback: row.feedback, feedback_comment: row.feedback_comment, finding_suggestion: row.finding_suggestion, finding: row.finding });
+					}
+				});
 			},
 			error: function (xhr) {
 				add_line("error", server_message(xhr) || __("The conversation could not be opened."));

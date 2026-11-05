@@ -31,7 +31,10 @@
 		"web_sources",
 		"feedback_section",
 		"feedback",
-		"feedback_comment"
+		"feedback_comment",
+		"finding_section",
+		"finding_suggestion",
+		"finding"
 	],
 	"fields": [
 		{
@@ -212,6 +215,25 @@
 			"fieldname": "feedback_comment",
 			"fieldtype": "Code",
 			"label": "Feedback comment",
+			"read_only": 1
+		},
+		{
+			"fieldname": "finding_section",
+			"fieldtype": "Section Break",
+			"label": "Finding",
+			"collapsible": 1
+		},
+		{
+			"fieldname": "finding_suggestion",
+			"fieldtype": "Code",
+			"label": "Finding suggestion",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "finding",
+			"fieldtype": "Data",
+			"label": "Finding",
 			"read_only": 1
 		}
 	],

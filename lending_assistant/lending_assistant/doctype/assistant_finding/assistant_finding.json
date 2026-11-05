@@ -1,0 +1,169 @@
+{
+	"actions": [],
+	"allow_copy": 0,
+	"allow_import": 0,
+	"allow_rename": 0,
+	"autoname": "AF-.#####",
+	"creation": "2026-11-05 22:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"title",
+		"summary",
+		"status",
+		"provenance_section",
+		"question",
+		"br_ids",
+		"doctypes",
+		"sources",
+		"cards_used",
+		"cards_basis",
+		"lending_version",
+		"author_name",
+		"source_message",
+		"confirmed_section",
+		"confirmed_by",
+		"confirmed_on"
+	],
+	"fields": [
+		{
+			"fieldname": "title",
+			"fieldtype": "Data",
+			"label": "Title",
+			"reqd": 1,
+			"length": 140,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "summary",
+			"fieldtype": "Markdown Editor",
+			"label": "Summary",
+			"reqd": 1
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Draft\nConfirmed",
+			"default": "Draft",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "provenance_section",
+			"fieldtype": "Section Break",
+			"label": "Where it came from"
+		},
+		{
+			"fieldname": "question",
+			"fieldtype": "Small Text",
+			"label": "Question",
+			"read_only": 1
+		},
+		{
+			"fieldname": "br_ids",
+			"fieldtype": "Small Text",
+			"label": "BR ids",
+			"description": "One per line",
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "doctypes",
+			"fieldtype": "Small Text",
+			"label": "Doctypes",
+			"description": "One per line"
+		},
+		{
+			"fieldname": "sources",
+			"fieldtype": "Code",
+			"label": "Sources",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "cards_used",
+			"fieldtype": "Code",
+			"label": "Cards used",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "cards_basis",
+			"fieldtype": "Data",
+			"label": "Cards basis",
+			"read_only": 1
+		},
+		{
+			"fieldname": "lending_version",
+			"fieldtype": "Data",
+			"label": "Lending version",
+			"read_only": 1
+		},
+		{
+			"fieldname": "author_name",
+			"fieldtype": "Data",
+			"label": "Author",
+			"read_only": 1
+		},
+		{
+			"fieldname": "source_message",
+			"fieldtype": "Data",
+			"label": "Source message",
+			"read_only": 1
+		},
+		{
+			"fieldname": "confirmed_section",
+			"fieldtype": "Section Break",
+			"label": "Confirmation"
+		},
+		{
+			"fieldname": "confirmed_by",
+			"fieldtype": "Link",
+			"label": "Confirmed by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "confirmed_on",
+			"fieldtype": "Datetime",
+			"label": "Confirmed on",
+			"read_only": 1
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-05 22:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Lending Assistant",
+	"name": "Assistant Finding",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"role": "Assistant User",
+			"read": 1
+		},
+		{
+			"role": "Assistant User",
+			"write": 1,
+			"delete": 1,
+			"if_owner": 1
+		},
+		{
+			"role": "Assistant Reviewer",
+			"read": 1,
+			"write": 1,
+			"delete": 1
+		},
+		{
+			"role": "System Manager",
+			"read": 1
+		}
+	],
+	"search_fields": "title,br_ids,status",
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "title"
+}

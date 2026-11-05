@@ -41,6 +41,26 @@ def _meta_of(doctype: str):
 	return [{"label": f.label, "fieldname": f.fieldname, "options": f.options} for f in meta.fields]
 
 
+def doctype_exists(doctype) -> bool:
+	"""True when the site has a doctype of this name (meta only, nothing is queried or written)."""
+	return isinstance(doctype, str) and bool(doctype) and _meta_of(doctype) is not None
+
+
+_VERSION = re.compile(r"""^__version__\s*=\s*["']([^"']+)["']""", re.MULTILINE)
+_INSTALLED: dict = {}
+
+
+def installed_lending_version() -> str:
+	"""`__version__` of the installed lending app, read from its `__init__.py` (cached per process); "" if unreadable."""
+	if "lending" not in _INSTALLED:
+		try:
+			match = _VERSION.search(_read_text(os.path.join(APP_ROOTS["lending"], "lending", "__init__.py")))
+		except OSError:
+			match = None
+		_INSTALLED["lending"] = match.group(1) if match else ""
+	return _INSTALLED["lending"]
+
+
 def _norm(text) -> str:
 	return " ".join(str(text or "").split()).lower()
 

@@ -146,6 +146,12 @@ ALLOWLIST = [
 	("frappe.get_roles", ANYWHERE, "call", False),
 	("frappe.utils.now_datetime", ANYWHERE, "call", False),
 	("frappe.utils.strip_html_tags", ANYWHERE, "call", False),
+	(
+		"frappe.msgprint",
+		("**/doctype/",),
+		"call",
+		False,
+	),  # M6: the Finding controller tells an author the status changed
 	# one file or folder, unmarked
 	("frappe.utils.get_bench_path", ("assistant/codereader.py",), "call", False),
 	("frappe.permissions.has_permission", (GUARD,), "call", False),
@@ -204,6 +210,7 @@ _PLAIN_IMPORTS = {
 	"kb/validate.py": ("json", "os", "re"),
 	"assistant/tools/registry.py": ("json",),
 	"assistant/orchestrator.py": ("time",),
+	"assistant/finding_rules.py": ("json", "re"),
 }
 _FROM_IMPORTS = {
 	GUARD: (
@@ -276,6 +283,7 @@ APP_API = {
 	f"{ASSISTANT}.orchestrator": set(),
 	f"{ASSISTANT}.audit": set(),
 	f"{ASSISTANT}.ratelimit": set(),
+	f"{ASSISTANT}.finding_rules": set(),
 	f"{PACKAGE}.install": set(),
 	# M3b knowledge base: pure functions over the ingested files. Only names that some module imports are listed.
 	f"{PACKAGE}.kb.store": {"CARD_ID", "TYPES", "parse_front_matter", "reset_cache", "load", "get_card"},
@@ -291,6 +299,7 @@ APP_API = {
 		"lookup",
 	},
 	f"{PACKAGE}.kb.search": {"bm25_scores", "search"},
+	f"{PACKAGE}.kb.validate": set(),
 }
 # (module, name, files, reserved): extra names for particular files. `reserved` grants are for code that does not exist
 # yet (M4); they are exempt from the dead-entry check and a test shows they work only in their file.
@@ -400,6 +409,13 @@ APP_GRANTS = [
 	(f"{ASSISTANT}.ratelimit", "USER_PREFIX", ("api/chat.py",), False),
 	(f"{ASSISTANT}.ratelimit", "IP_PREFIX", ("api/chat.py",), False),
 	(f"{ASSISTANT}.ratelimit", "FEEDBACK_PREFIX", ("api/chat.py",), False),
+	# M6: team findings
+	*[
+		(f"{ASSISTANT}.finding_rules", name, ("**/doctype/",), False)
+		for name in ("check_br_ids", "check_doctypes", "parse_json_list", "stale_reasons")
+	],
+	(f"{PACKAGE}.kb.validate", "doctype_exists", ("assistant/finding_rules.py",), False),
+	(f"{PACKAGE}.kb.validate", "installed_lending_version", ("assistant/finding_rules.py",), False),
 	(f"{PACKAGE}.install", "seed_defaults", ("patches/",), False),
 	(f"{PACKAGE}.install", "raise_max_tokens_default", ("patches/",), False),
 	(f"{PACKAGE}.install", "lower_default_effort", ("patches/",), False),

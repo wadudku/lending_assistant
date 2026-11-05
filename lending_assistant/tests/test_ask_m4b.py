@@ -56,7 +56,7 @@ class TestAskWiring(AskCase):
 			dispatch=lambda n, a=None: registry_ok(),
 			route="Form/Loan/AST-L-1", depth="Technical", deep=1,
 		)  # fmt: skip
-		self.assertEqual(set(result), {"conversation", "message", "answer", "status"})
+		self.assertEqual(set(result), {"conversation", "message", "answer", "status", "labels"})
 		row = self.row(result["message"])
 		self.assertEqual(
 			(row.status, row.model, row.depth, row.deep), ("ok", "claude-opus-5-5", "Technical", 1)
@@ -144,6 +144,14 @@ class TestAskWiring(AskCase):
 			with self.assertRaises(frappe.PermissionError):
 				chat.ask("hello")
 			run.assert_not_called()
+
+
+class TestAskLabels(AskCase):
+	def test_ask_returns_status_and_the_labels_found_outside_sources(self):
+		text = "Short answer. [Analysis] BRD 7.1.\nSources: [Code] x.py"
+		result, _ = self.ask([cf.response("end_turn", cf.text(text))])
+		self.assertEqual(result["status"], "ok")
+		self.assertEqual(result["labels"], ["[Analysis]"])  # a Sources-only label is not found
 
 
 def registry_ok():

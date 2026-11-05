@@ -10,7 +10,7 @@ import time
 import frappe
 from frappe import _
 
-from lending_assistant.assistant import audit, orchestrator, ratelimit
+from lending_assistant.assistant import audit, orchestrator, prompts, ratelimit
 from lending_assistant.assistant.settings import get_settings
 
 ASSISTANT_USER = "Assistant User"
@@ -88,6 +88,9 @@ def ask(question=None, conversation=None, route=None, depth="Both", deep=0):
 		"message": message,
 		"answer": outcome["answer"],
 		"status": outcome["status"],
+		"labels": prompts.find_labels(
+			outcome["answer"]
+		),  # additive; the panel never depends on it (history has none)
 	}
 
 

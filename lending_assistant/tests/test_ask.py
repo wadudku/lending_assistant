@@ -42,7 +42,7 @@ class TestAsk(AssistantTestCase):
 		dev_before = len(frappe.get_list("Assistant Message", pluck="name", limit_page_length=0))
 
 		result = chat.ask("What is DPD?", route="Form/Loan/AST-LOAN-1", depth="Technical", deep=1)
-		self.assertEqual(set(result), {"conversation", "message", "answer", "status"})
+		self.assertEqual(set(result), {"conversation", "message", "answer", "status", "labels"})
 		self.assertEqual(result["answer"], "The advisor has no API key yet.")
 		self.assertEqual(result["status"], "error")
 

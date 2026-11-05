@@ -207,3 +207,13 @@ class TestHelpers(AssistantTestCase):
 		self.assertEqual([m["role"] for m in messages], ["user", "assistant"] * 4)
 		self.assertEqual(prompts.history_messages([]), [])
 		self.assertEqual(prompts.history_messages([{"question": "", "answer": "a"}]), [])
+
+
+class TestPermissionsPrompt(AssistantTestCase):
+	def test_the_prompt_requires_check_my_access_before_telling_the_user_to_act(self):
+		text = prompts.STABLE_PROMPT
+		self.assertIn(
+			"Before you tell the user to run a job, create, submit, cancel or change anything, call check_my_access",
+			text,
+		)
+		self.assertIn("Do this in a how-to answer too", text)

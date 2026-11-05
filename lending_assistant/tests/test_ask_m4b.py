@@ -81,6 +81,14 @@ class TestAskWiring(AskCase):
 				self.assertEqual(self.count("Assistant Message"), before + 1)
 				self.assertEqual(self.row(result["message"]).status, result["status"])
 
+	def test_a_settings_failure_still_writes_one_error_row(self):
+		before = self.count("Assistant Message")
+		self.as_user("dev")
+		with mock.patch.object(orchestrator.settings, "get_settings", side_effect=RuntimeError("boom")):
+			result = chat.ask("hello")
+		self.assertEqual((result["status"], self.count("Assistant Message")), ("error", before + 1))
+		self.assertEqual(self.row(result["message"]).status, "error")
+
 	def test_no_key_still_writes_the_row_and_makes_no_call(self):
 		with mock.patch.object(orchestrator, "_api_key", return_value=None):
 			before = self.count("Assistant Message")

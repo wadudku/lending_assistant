@@ -64,12 +64,24 @@ class _Stop(Exception):
 		self.message = message
 
 
+SAFE_TOKEN_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-")
+
+
+def _safe_token(value) -> str:
+	"""A log value is kept only as a short plain token ([A-Za-z0-9_.-], at most 40 characters); anything else is `other`.
+	A key-shaped value (long, or with other characters) never reaches the log."""
+	text = str(value)
+	return (
+		text
+		if 0 < len(text) <= 40 and set(text) <= SAFE_TOKEN_CHARS and not text.startswith("sk-")
+		else "other"
+	)
+
+
 def _log(event: str, **fields) -> None:
 	"""One warning line: user, kind and a few safe tokens (tool name, error kind, status). Never an exception text, header or body."""
 	try:
-		safe = {
-			k: str(v)[:60] for k, v in fields.items() if str(v).replace("_", "").replace("-", "").isalnum()
-		}
+		safe = {k: _safe_token(v) for k, v in fields.items()}
 		logger = frappe.logger("lending_assistant_chat")
 		if logger.level > 30:
 			logger.setLevel(30)
@@ -174,7 +186,8 @@ def _request(client, turn, settings_, tools, system, messages, timeout, retries,
 	response = client.with_options(max_retries=retries).beta.messages.create(**kwargs)
 	turn.usage.add(response.usage)
 	served = response.model
-	turn.served = served if isinstance(served, str) and served and served != settings_["model"] else None
+	if turn.served is None and isinstance(served, str) and served and served != settings_["model"]:
+		turn.served = served  # the FIRST model that differs from the requested one; a later call never overwrites it (G10)
 	return response
 
 
@@ -413,17 +426,22 @@ def _tools_and_system(cfg, route_doctype, route_docname, depth, deep):
 
 
 def run(question, *, route_doctype="", route_docname="", depth="Both", deep=0, history=None) -> dict:
-	"""Answer one question. Returns the audit fields plus `answer`, `status` and `usage`; see `_Turn.result`."""
-	cfg = settings.get_settings()
+	"""Answer one question. Returns the audit fields plus `answer`, `status` and `usage`; see `_Turn.result`.
+
+	Everything, the settings and the key included, runs inside the guarded block, so every failure still ends in a reply
+	and one audit row (G10)."""
 	deep = bool(deep)
-	model = (cfg.deep_model if deep else cfg.default_model) or ""
-	effort = (cfg.deep_effort if deep else cfg.default_effort) or "medium"
-	turn = _Turn(model, deep)
-	key = _api_key()
-	if not key:
-		turn.model = STUB_MODEL
-		return turn.result(prompts.MESSAGES["no_key"], "error")
+	turn = _Turn("", deep)
+	key = None
 	try:
+		cfg = settings.get_settings()
+		model = (cfg.deep_model if deep else cfg.default_model) or ""
+		effort = (cfg.deep_effort if deep else cfg.default_effort) or "medium"
+		turn.model = model
+		key = _api_key()
+		if not key:
+			turn.model = STUB_MODEL
+			return turn.result(prompts.MESSAGES["no_key"], "error")
 		client = _make_client(key)
 		tools, system = _tools_and_system(cfg, route_doctype, route_docname, depth, deep)
 		messages = [*prompts.history_messages(history), {"role": "user", "content": question}]

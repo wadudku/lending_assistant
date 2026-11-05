@@ -4,6 +4,7 @@ import json
 from unittest import mock
 
 import anthropic
+import frappe
 
 from lending_assistant.assistant import guard, orchestrator, prompts
 from lending_assistant.assistant.tools import registry
@@ -625,3 +626,54 @@ class TestErrorsAndStub(OrchTestCase):
 		with mock.patch.object(orchestrator.anthropic, "Anthropic") as ctor:
 			REAL_MAKE_CLIENT("k")
 		ctor.assert_called_once_with(api_key="k", base_url="https://api.anthropic.com", max_retries=1)
+
+
+class TestFixupLowFindings(OrchTestCase):
+	def test_log_keeps_only_short_plain_tokens(self):
+		self.assertEqual(orchestrator._safe_token("invalid_request_error"), "invalid_request_error")
+		self.assertEqual(orchestrator._safe_token(400), "400")
+		self.assertEqual(orchestrator._safe_token("claude-sonnet-5-5"), "claude-sonnet-5-5")
+		for bad in (
+			cf.FAKE_KEY,
+			"sk-ant-api03-" + "A" * 80,
+			"a b",
+			"x" * 41,
+			"",
+			"key=sk-ant",
+			"<data>",
+			"sk-ant-short",
+		):
+			self.assertEqual(orchestrator._safe_token(bad), "other", bad)
+		with mock.patch.object(frappe, "logger") as logger:
+			logger.return_value.level = 30
+			orchestrator._log("api_error", kind="server", api_type=cf.FAKE_KEY)
+		line = logger.return_value.warning.call_args[0][0]
+		self.assertIn("api_type=other", line)
+		self.assertNotIn(cf.FAKE_KEY, line)
+
+	def test_the_served_model_is_the_first_one_that_differs_and_is_not_overwritten(self):
+		script = [
+			cf.response("tool_use", cf.tool_use("t1", "get_card", {"card_id": "x"}), model="claude-opus-5-5"),
+			cf.response(
+				"end_turn", cf.text(LABELLED), model="claude-sonnet-5-5"
+			),  # back on the requested model
+		]
+		result, _ = self.go(script, dispatch=lambda n, a=None: ok())
+		self.assertEqual(result["model"], "claude-opus-5-5")
+		script = [
+			cf.response(
+				"tool_use", cf.tool_use("t1", "get_card", {"card_id": "x"}), model="claude-sonnet-5-5"
+			),
+			cf.response("end_turn", cf.text(LABELLED), model="claude-opus-5-5"),
+		]
+		result, _ = self.go(script, dispatch=lambda n, a=None: ok())
+		self.assertEqual(result["model"], "claude-opus-5-5")  # first differing one is the later call here
+
+	def test_a_settings_or_key_failure_still_gives_a_reply_and_an_error_status(self):
+		for target in ("get_settings", "_api_key"):
+			with self.subTest(target=target):
+				owner = orchestrator.settings if target == "get_settings" else orchestrator
+				with mock.patch.object(owner, target, side_effect=RuntimeError("boom " + cf.FAKE_KEY)):
+					result = orchestrator.run("Q?")
+				self.assertEqual((result["status"], result["answer"]), ("error", prompts.MESSAGES["error"]))
+				self.assertNotIn(cf.FAKE_KEY, json.dumps(result, default=str))

@@ -39,7 +39,7 @@ GET_LOAN_DUES_SCHEMA = {
 	"description": (
 		"What is due on one loan, from the Loan Demand rows you may read: billed, paid, waived, outstanding and overdue "
 		"amounts per demand type, plus the loan's status fields. Does NOT include accrued-but-unbilled interest, future "
-		"interest or unbooked penalty. as_on_date is a YYYY-MM-DD date, or null for today."
+		"interest or unbooked penalty. as_on_date is a YYYY-MM-DD date; leave it out for today."
 	),
 	"strict": True,
 	"input_schema": {
@@ -47,11 +47,11 @@ GET_LOAN_DUES_SCHEMA = {
 		"properties": {
 			"loan": {"type": "string", "description": "The Loan ID."},
 			"as_on_date": {
-				"type": ["string", "null"],
-				"description": "YYYY-MM-DD, or null for today. Demands dated after it are left out.",
+				"type": "string",
+				"description": "YYYY-MM-DD; leave it out for today. Demands dated after it are left out.",
 			},
 		},
-		"required": ["loan", "as_on_date"],
+		"required": ["loan"],
 		"additionalProperties": False,
 	},
 }

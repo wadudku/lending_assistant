@@ -169,13 +169,17 @@ def _check_object(value: dict, spec: dict, path: str, tool: str) -> dict:
 	clean = {}
 	for key, sub in properties.items():
 		where = f"{path}.{key}" if path else key
+		optional = key not in spec.get("required", list(properties))
 		if key not in value:
-			if "null" in _types(sub):
-				clean[key] = (
-					None  # strict mode always sends every key; this only helps callers that leave one out
-				)
+			if optional or "null" in _types(sub):
+				clean[key] = None  # an omitted optional argument is None for the tool, as a null always was
 				continue
 			raise ToolError(f"Missing argument '{where}'.")
+		if (
+			optional and value[key] is None
+		):  # an explicit null for an optional argument is still accepted (M4a)
+			clean[key] = None
+			continue
 		clean[key] = _check(value[key], sub, where, tool)
 	return clean
 

@@ -31,8 +31,8 @@ CARD_FIELDS = (
 )  # fmt: skip
 
 
-def _string_or_null(description: str) -> dict:
-	return {"type": ["string", "null"], "description": description}
+def _optional_string(description: str) -> dict:
+	return {"type": "string", "description": description}
 
 
 LOOKUP_KNOWLEDGE_SCHEMA = {
@@ -40,23 +40,23 @@ LOOKUP_KNOWLEDGE_SCHEMA = {
 	"description": (
 		"Find knowledge cards by exact key: a doctype, an action on a doctype, a BR id, a BRD section, a glossary or "
 		"lifecycle term, a journey or a development item. Returns ranked summaries, never card bodies; use get_card "
-		"to read one. Pass null for keys you do not have."
+		"to read one. Leave out the keys you do not have."
 	),
 	"strict": True,
 	"input_schema": {
 		"type": "object",
 		"properties": {
-			"doctype": _string_or_null("A Frappe Lending doctype name, for example Loan Repayment."),
-			"action": _string_or_null(
+			"doctype": _optional_string("A Frappe Lending doctype name, for example Loan Repayment."),
+			"action": _optional_string(
 				"What the user does, for example create, submit, waive, or Loan Repayment:create."
 			),
-			"br_id": _string_or_null("A BRD requirement id: BR-LMS-123, 123, 170r."),
-			"brd_section": _string_or_null("A BRD section number, for example 7.7 or 7.7.1."),
-			"term": _string_or_null("A glossary, lifecycle or decision term, for example write-off or SMA."),
-			"journey": _string_or_null("A journey, J1 to J11."),
-			"dev_item": _string_or_null("A development item, D1 to D20."),
+			"br_id": _optional_string("A BRD requirement id: BR-LMS-123, 123, 170r."),
+			"brd_section": _optional_string("A BRD section number, for example 7.7 or 7.7.1."),
+			"term": _optional_string("A glossary, lifecycle or decision term, for example write-off or SMA."),
+			"journey": _optional_string("A journey, J1 to J11."),
+			"dev_item": _optional_string("A development item, D1 to D20."),
 		},
-		"required": ["doctype", "action", "br_id", "brd_section", "term", "journey", "dev_item"],
+		"required": [],
 		"additionalProperties": False,
 	},
 }
@@ -88,12 +88,12 @@ SEARCH_KNOWLEDGE_SCHEMA = {
 				"description": "Words describing what to find (at most 500 characters).",
 			},
 			"type": {
-				# The API rejects an enum next to a type list ("Enum value does not match declared type"): use anyOf.
-				"anyOf": [{"type": "string", "enum": list(store.TYPES)}, {"type": "null"}],
-				"description": "Only cards of this type, or null for all.",
+				"type": "string",
+				"enum": list(store.TYPES),
+				"description": "Only cards of this type; leave it out for all.",
 			},
 		},
-		"required": ["query", "type"],
+		"required": ["query"],
 		"additionalProperties": False,
 	},
 }

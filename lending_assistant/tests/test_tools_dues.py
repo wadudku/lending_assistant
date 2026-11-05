@@ -200,4 +200,4 @@ class TestLoanDuesPerPersona(ToolTestCase):
 		schema = dues.GET_LOAN_DUES_SCHEMA["input_schema"]
 		self.assertTrue(dues.GET_LOAN_DUES_SCHEMA["strict"])
 		self.assertFalse(schema["additionalProperties"])
-		self.assertEqual(set(schema["required"]), set(schema["properties"]))
+		self.assertEqual(schema["required"], ["loan"])  # as_on_date is optional, not nullable (M4b)

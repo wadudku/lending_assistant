@@ -19,15 +19,15 @@ SEARCH_CODE_SCHEMA = {
 		"properties": {
 			"query": {"type": "string", "description": "The text to find, at most 200 characters."},
 			"app": {
-				"type": ["string", "null"],
-				"description": "Only search this app, or null for all readable apps.",
+				"type": "string",
+				"description": "Only search this app, or leave it out for all readable apps.",
 			},
 			"path_glob": {
-				"type": ["string", "null"],
-				"description": "A short relative pattern such as *loan_repayment*, or null.",
+				"type": "string",
+				"description": "A short relative pattern such as *loan_repayment*; optional.",
 			},
 		},
-		"required": ["query", "app", "path_glob"],
+		"required": ["query"],
 		"additionalProperties": False,
 	},
 }
@@ -43,15 +43,15 @@ READ_CODE_SCHEMA = {
 		"properties": {
 			"path": {"type": "string", "description": "<app>/<path inside the app repo>."},
 			"start_line": {
-				"type": ["integer", "null"],
-				"description": "First line, 1 or more; null means 1.",
+				"type": "integer",
+				"description": "First line, 1 or more; leave it out for 1.",
 			},
 			"end_line": {
-				"type": ["integer", "null"],
-				"description": "Last line; null or more than 200 lines after start_line is cut to 200 lines.",
+				"type": "integer",
+				"description": "Last line; leave it out, or more than 200 lines after start_line is cut to 200 lines.",
 			},
 		},
-		"required": ["path", "start_line", "end_line"],
+		"required": ["path"],
 		"additionalProperties": False,
 	},
 }

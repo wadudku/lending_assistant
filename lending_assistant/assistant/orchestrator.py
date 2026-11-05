@@ -371,6 +371,33 @@ def _status_and_type(exc) -> tuple[int, str]:
 	return status, (api_type if api_type.replace("_", "").isalnum() else "")
 
 
+def _tools_and_system(cfg, route_doctype, route_docname, depth, deep):
+	"""The `tools` and `system` of a request, built in one place so the smoke preflight sends exactly what `run` sends."""
+	tools = registry.tool_definitions()
+	names = [t["name"] for t in tools]
+	if tools:
+		tools[-1]["cache_control"] = {"type": "ephemeral"}
+	if cfg.web_search:
+		tools.append(dict(WEB_TOOL))
+		names.append("web_search")
+	system = [
+		prompts.stable_block(),
+		prompts.volatile_block(
+			today=now_datetime().date().isoformat(),
+			roles=frappe.get_roles(),
+			route_doctype=route_doctype,
+			route_docname=route_docname,
+			depth=depth,
+			deep=deep,
+			tools=names,
+			live_data=bool(cfg.live_data),
+			code_reader=bool(cfg.code_reader),
+			web_search=bool(cfg.web_search),
+		),
+	]
+	return tools, system
+
+
 def run(question, *, route_doctype="", route_docname="", depth="Both", deep=0, history=None) -> dict:
 	"""Answer one question. Returns the audit fields plus `answer`, `status` and `usage`; see `_Turn.result`."""
 	cfg = settings.get_settings()
@@ -384,28 +411,7 @@ def run(question, *, route_doctype="", route_docname="", depth="Both", deep=0, h
 		return turn.result(prompts.MESSAGES["no_key"], "error")
 	try:
 		client = _make_client(key)
-		tools = registry.tool_definitions()
-		names = [t["name"] for t in tools]
-		if tools:
-			tools[-1]["cache_control"] = {"type": "ephemeral"}
-		if cfg.web_search:
-			tools.append(dict(WEB_TOOL))
-			names.append("web_search")
-		system = [
-			prompts.stable_block(),
-			prompts.volatile_block(
-				today=now_datetime().date().isoformat(),
-				roles=frappe.get_roles(),
-				route_doctype=route_doctype,
-				route_docname=route_docname,
-				depth=depth,
-				deep=deep,
-				tools=names,
-				live_data=bool(cfg.live_data),
-				code_reader=bool(cfg.code_reader),
-				web_search=bool(cfg.web_search),
-			),
-		]
+		tools, system = _tools_and_system(cfg, route_doctype, route_docname, depth, deep)
 		messages = [*prompts.history_messages(history), {"role": "user", "content": question}]
 		fixed = {
 			"model": model,

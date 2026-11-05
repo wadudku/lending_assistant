@@ -162,7 +162,7 @@ class TestKnowledgeTools(AssistantTestCase):
 				self.assertIs(schema["strict"], True)
 				self.assertIs(body["additionalProperties"], False)
 				self.assertEqual(body["type"], "object")
-				self.assertEqual(sorted(body["required"]), sorted(body["properties"]))
+				self.assertTrue(set(body["required"]) <= set(body["properties"]))
 				for name, prop in body["properties"].items():
 					self.assertTrue("type" in prop or "anyOf" in prop, name)
 		self.assertEqual(
@@ -170,7 +170,7 @@ class TestKnowledgeTools(AssistantTestCase):
 			["doctype", "action", "br_id", "brd_section", "term", "journey", "dev_item"],
 		)
 		self.assertEqual(
-			knowledge.SEARCH_KNOWLEDGE_SCHEMA["input_schema"]["properties"]["type"]["anyOf"][0]["enum"],
+			knowledge.SEARCH_KNOWLEDGE_SCHEMA["input_schema"]["properties"]["type"]["enum"],
 			list(store.TYPES),
 		)
 		json.dumps(knowledge.SCHEMAS)  # plain JSON

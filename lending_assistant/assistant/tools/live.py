@@ -5,8 +5,8 @@ The session user is the only identity: no argument names a user, role or company
 `<data source="live_site">` envelope within the G9 size cap. The registry (registry.py) validates the arguments,
 checks the switches, runs the function inside the read-only context and checks the result. No `@frappe.whitelist`.
 
-Schemas are strict-compatible (#141 R3): `additionalProperties: false`, every property in `required` (optional ones are
-nullable), and no length or range keywords. Python checks the limits, in the registry and in the guard.
+Schemas are strict-compatible (#141 R3): `additionalProperties: false`, optional properties are left out of `required` and
+are not nullable (the API limits union-typed parameters, M4b), and no length or range keywords. Python checks the limits, in the registry and in the guard.
 """
 
 import frappe
@@ -18,8 +18,8 @@ OPERATORS = ("=", "!=", "<", ">", "<=", ">=", "like", "in", "not in", "between",
 LIST_OPERATORS = ("in", "not in", "between")
 
 
-def _string_or_null(description: str) -> dict:
-	return {"type": ["string", "null"], "description": description}
+def _optional_string(description: str) -> dict:
+	return {"type": "string", "description": description}
 
 
 GET_SCREEN_HELP_SCHEMA = {
@@ -34,11 +34,11 @@ GET_SCREEN_HELP_SCHEMA = {
 		"type": "object",
 		"properties": {
 			"doctype": {"type": "string", "description": "The doctype name, for example Loan Repayment."},
-			"search": _string_or_null(
-				"Only fields whose label or fieldname contains this text (case-insensitive), or null."
+			"search": _optional_string(
+				"Only fields whose label or fieldname contains this text (case-insensitive), or leave it out."
 			),
 		},
-		"required": ["doctype", "search"],
+		"required": ["doctype"],
 		"additionalProperties": False,
 	},
 }
@@ -58,11 +58,11 @@ CHECK_MY_ACCESS_SCHEMA = {
 				"items": {"type": "string", "enum": list(access.ACTIONS)},
 				"description": "One to six different actions.",
 			},
-			"docname": _string_or_null(
-				"A record ID to check the actions on that record, or null for the doctype."
+			"docname": _optional_string(
+				"A record ID to check the actions on that record, or leave it out for the doctype."
 			),
 		},
-		"required": ["doctype", "actions", "docname"],
+		"required": ["doctype", "actions"],
 		"additionalProperties": False,
 	},
 }
@@ -108,13 +108,13 @@ FIND_RECORDS_SCHEMA = {
 				"items": {"type": "string"},
 				"description": "1 to 30 fieldnames you can read.",
 			},
-			"order_by": _string_or_null("'<fieldname> asc' or '<fieldname> desc', or null."),
+			"order_by": _optional_string("'<fieldname> asc' or '<fieldname> desc', or leave it out."),
 			"limit": {
-				"type": ["integer", "null"],
-				"description": "Rows wanted, 1 to 20; null means 20. More than 20 is cut to 20.",
+				"type": "integer",
+				"description": "Rows wanted, 1 to 20; leave it out for 20. More than 20 is cut to 20.",
 			},
 		},
-		"required": ["doctype", "filters", "fields", "order_by", "limit"],
+		"required": ["doctype", "filters", "fields"],
 		"additionalProperties": False,
 	},
 }

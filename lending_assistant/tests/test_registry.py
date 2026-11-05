@@ -11,7 +11,7 @@ from unittest import mock
 
 import frappe
 
-from lending_assistant.assistant import guard
+from lending_assistant.assistant import guard, orchestrator
 from lending_assistant.assistant.tools import registry
 from lending_assistant.tests.base import ToolTestCase
 
@@ -82,6 +82,26 @@ class TestRegistryShape(ToolTestCase):
 						self.assertTrue(all("type" in b for b in node["anyOf"]))
 						self.assertNotIn("type", node, "anyOf and type together are ambiguous")
 
+	def test_union_typed_parameters_stay_under_the_api_limit_with_margin(self):
+		"""Live 400 (M4b smoke): 'too many parameters with union types ... limit: 16'. Counts type lists and anyOf, recursively,
+		over every strict tool; web search on or off adds none (it is a server tool with no input_schema of ours)."""
+		total = 0
+		for entry in registry.TOOLS.values():
+			for _path, node in walk(entry["schema"]["input_schema"]):
+				if isinstance(node.get("type"), list | tuple) or "anyOf" in node:
+					total += 1
+		self.assertLessEqual(total, 12, "the API limit is 16; keep a margin")
+		self.assertNotIn("input_schema", orchestrator.WEB_TOOL)
+
+	def test_an_omitted_optional_argument_is_none_and_an_explicit_null_is_still_accepted(self):
+		schema = registry.TOOLS["search_knowledge"]["schema"]["input_schema"]
+		self.assertEqual(registry.validate_args(schema, {"query": "q"}), {"query": "q", "type": None})
+		self.assertEqual(registry.validate_args(schema, {"query": "q", "type": None})["type"], None)
+		with self.assertRaises(registry.ToolError):
+			registry.validate_args(schema, {"type": "brd_section"})  # a required one is still required
+		with self.assertRaises(registry.ToolError):
+			registry.validate_args(schema, {"query": "q", "type": "bogus"})
+
 	def test_a_nullable_enum_still_validates_strictly_in_python(self):
 		schema = registry.TOOLS["search_knowledge"]["schema"]["input_schema"]
 		self.assertEqual(registry.validate_args(schema, {"query": "q", "type": None})["type"], None)
@@ -104,16 +124,20 @@ class TestRegistryShape(ToolTestCase):
 					)
 					if node.get("type") == "object":
 						self.assertIs(node["additionalProperties"], False)
-						self.assertEqual(
-							sorted(node["required"]), sorted(node["properties"]), "every property is required"
-						)
+						self.assertTrue(set(node["required"]) <= set(node["properties"]))
+						for key in set(node["properties"]) - set(
+							node["required"]
+						):  # optional: never a union (M4b)
+							self.assertIsInstance(
+								node["properties"][key].get("type"), str, f"{name} {path}.{key}"
+							)
 					self.assertTrue("type" in node or "anyOf" in node)
 
-	def test_a_nullable_argument_is_typed_with_null_and_the_others_are_not(self):
-		optional = registry.TOOLS["find_records"]["schema"]["input_schema"]["properties"]
-		self.assertIn("null", optional["limit"]["type"])
-		self.assertIn("null", optional["order_by"]["type"])
-		self.assertNotIn("null", registry._types(optional["doctype"]))
+	def test_optional_arguments_are_left_out_of_required_and_not_nullable(self):
+		schema = registry.TOOLS["find_records"]["schema"]["input_schema"]
+		self.assertEqual(sorted(schema["required"]), ["doctype", "fields", "filters"])
+		for key in ("limit", "order_by"):
+			self.assertEqual(registry._types(schema["properties"][key]).count("null"), 0)
 
 	def test_no_tool_function_is_whitelisted_and_no_tool_takes_an_identity_argument(self):
 		for name, entry in registry.TOOLS.items():

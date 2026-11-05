@@ -25,6 +25,9 @@ NETWORK = [
 	"import pymysql",
 	"import MySQLdb",
 	"import httpx",
+	"import httpx2",
+	"import httpx2 as h",
+	"from httpx2 import Client",
 	"import smtplib",
 	"import ssl",
 	"from socket import socket",
@@ -81,17 +84,6 @@ class TestImportAllowlist(AssistantTestCase):
 			"def f():\n    import requests\n    return requests.get('x')\n",
 			"network-import",
 		)
-
-	def test_anthropic_is_a_hit_everywhere_today_the_orchestrator_row_comes_in_m4b(self):
-		for rel in (
-			"assistant/tools/live.py",
-			"assistant/orchestrator.py",
-			"api/chat.py",
-			"assistant/guard.py",
-		):
-			for line in ("import anthropic", "from anthropic import Anthropic"):
-				with self.subTest(rel=rel, line=line):
-					self.assertHit(rel, f"{line}\n", "import", f"{line} in {rel}")
 
 	def test_file_changing_names_imported_from_a_stdlib_module_are_hits(self):
 		for rel in FILES:

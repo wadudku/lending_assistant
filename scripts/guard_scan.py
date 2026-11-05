@@ -184,7 +184,8 @@ IMPORT_ALLOWLIST = [
 	("from", "frappe.model", "get_permitted_fields", (GUARD,)),
 	("from", "frappe.model.document", "Document", ("**/doctype/",)),
 	# M4a (#45): everything that is not frappe or the app, per file, down to the imported name. A file or a name that is
-	# not listed is a hit. `anthropic` has no row yet: M4b adds ("import", "anthropic", None, ("assistant/orchestrator.py",)).
+	# not listed is a hit. `anthropic` (M4b, #145) is allowed in the orchestrator only, as `import anthropic`.
+	("import", "anthropic", None, ("assistant/orchestrator.py",)),
 	# An alias (`import x as y`, `from x import y as z`) needs its own row: kind "import" with name "as y", or kind "from"
 	# with name "y as z". There are none today.
 ]
@@ -222,7 +223,8 @@ IMPORT_ALLOWLIST += [
 	("from", module, name, (rel,)) for rel, pairs in _FROM_IMPORTS.items() for module, name in pairs
 ]
 # Modules that open a network connection or talk to a database. A hit in every file: no row can allow them and no
-# marker excuses them (M4a, #45). `anthropic` is not here: it is allowed in the orchestrator only, by a row in M4b.
+# marker excuses them (M4a, #45). `anthropic` is not here: the orchestrator's import row allows it there only (M4b).
+# `httpx2` is the transport the installed anthropic 1.17.0 requires (its metadata lists httpx2, not httpx).
 NETWORK_MODULES = (
 	"socket",
 	"requests",
@@ -232,6 +234,7 @@ NETWORK_MODULES = (
 	"pymysql",
 	"MySQLdb",
 	"httpx",
+	"httpx2",
 	"ssl",
 	"smtplib",
 	"ftplib",

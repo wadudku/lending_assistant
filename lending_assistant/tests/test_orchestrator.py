@@ -81,7 +81,7 @@ class TestStopReasons(OrchTestCase):
 		block = second[2]["content"][0]
 		self.assertEqual((block["type"], block["tool_use_id"]), ("tool_result", "t1"))
 		self.assertNotIn("is_error", block)
-		self.assertEqual(result["cards_used"], [{"id": "x", "version": 2}])
+		self.assertEqual(result["cards_used"], [{"id": "x", "version": 2, "via": "get_card"}])
 		self.assertEqual(result["tool_calls"][0]["name"], "get_card")
 		self.assertFalse(result["tool_calls"][0]["refused"])
 
@@ -390,7 +390,10 @@ class TestAudit(OrchTestCase):
 				"get_record": ok("live_site", doctype="Loan", name="L-1", data={}),
 				"find_records": ok("live_site", doctype="Loan Demand", rows=[{"name": "D-1"}, {"name": "D-2"}]),
 				"read_code": ok("code", path="lending/x.py", start_line=3, end_line=40, lines=[]),
-				"lookup_knowledge": ok("analysis", results=[{"id": "bridge.a", "version": 1}, {"id": "screen.b", "version": 4}]),
+				"lookup_knowledge": ok("analysis", results=[
+				{"id": "bridge.a", "version": 1, "via": "lookup"},
+				{"id": "screen.b", "version": 4, "via": "lookup"},
+			]),
 				"get_loan_dues": ok("live_site", loan="L-9", rows_read=12),
 			}[name]  # fmt: skip
 
@@ -413,7 +416,11 @@ class TestAudit(OrchTestCase):
 			result["code_files_read"], [{"path": "lending/x.py", "start_line": 3, "end_line": 40}]
 		)
 		self.assertEqual(
-			result["cards_used"], [{"id": "bridge.a", "version": 1}, {"id": "screen.b", "version": 4}]
+			result["cards_used"],
+			[
+				{"id": "bridge.a", "version": 1, "via": "lookup"},
+				{"id": "screen.b", "version": 4, "via": "lookup"},
+			],
 		)
 		self.assertEqual(
 			[c["name"] for c in result["tool_calls"]],

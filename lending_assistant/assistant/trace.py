@@ -137,14 +137,20 @@ def code_files_from(tool: str, content: str) -> list[dict]:
 	return []
 
 
+CARD_VIA = {"lookup_knowledge": "lookup", "get_card": "get_card", "search_knowledge": "search"}
+
+
 def cards_from(tool: str, content: str) -> list[dict]:
-	"""`{id, version}` for every card a knowledge tool handed to the model (it saw at least the summary)."""
+	"""`{id, version, via}` for every card a knowledge tool handed to the model (it saw at least the summary). `via` says which
+	tool did it: `lookup`, `get_card` (the model read the card) or `search`; a summary is not a read (G10)."""
 	payload = _payload(content)
-	if not isinstance(payload, dict) or tool not in ("lookup_knowledge", "get_card", "search_knowledge"):
+	if not isinstance(payload, dict) or tool not in CARD_VIA:
 		return []
 	cards = [payload] if tool == "get_card" else payload.get("results") or []
 	return [
-		{"id": c["id"], "version": c.get("version")} for c in cards if isinstance(c, dict) and c.get("id")
+		{"id": c["id"], "version": c.get("version"), "via": CARD_VIA[tool]}
+		for c in cards
+		if isinstance(c, dict) and c.get("id")
 	]
 
 

@@ -33,6 +33,21 @@ class TestTrace(AssistantTestCase):
 			self.assertEqual(fn("get_record", "not an envelope"), [])
 			self.assertEqual(fn("get_record", '{"error": "x"}'), [])
 
+	def test_every_card_entry_says_which_tool_handed_it_over(self):
+		summaries = guard.as_data(
+			{"results": [{"id": "a", "version": 1}, {"id": "b", "version": 2}]}, "analysis"
+		)
+		card = guard.as_data({"id": "c", "version": 3}, "analysis")
+		self.assertEqual(
+			trace.cards_from("lookup_knowledge", summaries),
+			[{"id": "a", "version": 1, "via": "lookup"}, {"id": "b", "version": 2, "via": "lookup"}],
+		)
+		self.assertEqual(
+			trace.cards_from("search_knowledge", summaries)[0], {"id": "a", "version": 1, "via": "search"}
+		)
+		self.assertEqual(trace.cards_from("get_card", card), [{"id": "c", "version": 3, "via": "get_card"}])
+		self.assertEqual(trace.cards_from("get_record", card), [])
+
 	def test_records_are_read_from_the_result_never_from_the_arguments(self):
 		env = guard.as_data({"doctype": "Loan", "name": "REAL"}, "live_site")
 		self.assertEqual(trace.records_from("get_record", env), [{"doctype": "Loan", "name": "REAL"}])

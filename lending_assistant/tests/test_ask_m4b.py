@@ -62,7 +62,7 @@ class TestAskWiring(AskCase):
 		)
 		self.assertEqual((row.tokens_in, row.tokens_out), (10 + 300 + 20 + 300, 14))
 		self.assertEqual(json.loads(row.tool_calls)[0]["name"], "get_card")
-		self.assertEqual(json.loads(row.cards_used), [{"id": "c1", "version": 3}])
+		self.assertEqual(json.loads(row.cards_used), [{"id": "c1", "version": 3, "via": "get_card"}])
 		self.assertEqual((row.route_doctype, row.route_docname), ("Loan", "AST-L-1"))
 		self.assertEqual(row.answer, LABELLED)
 		self.assertGreaterEqual(row.latency_ms, 0)

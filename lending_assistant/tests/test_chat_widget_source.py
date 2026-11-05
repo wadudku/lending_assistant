@@ -185,6 +185,16 @@ class TestFindingsWidget(unittest.TestCase):
 		self.assertNotIn("lending_assistant.api", text)
 		self.assertIn("limit_page_length: CAP", text)
 
+	def test_the_export_puts_title_question_and_summary_in_fences_longer_than_their_text(self):
+		text = (DOCTYPE_DIR / "assistant_finding_list.js").read_text()
+		self.assertIn("function fenced(text)", text)
+		self.assertIn("/`+|~+/g", text)
+		self.assertIn("run.length + 1", text)
+		for field in ("title", "question", "summary"):
+			self.assertIn(f"fenced(row.{field})", text)
+		self.assertIn('"## " + row.name,', text)
+		self.assertNotIn('"> "', text)
+
 	def test_links_to_this_site_are_limited_to_app_and_our_assets(self):
 		code = js_code()
 		begin, end = function_span(code, "safe_href")
@@ -192,3 +202,5 @@ class TestFindingsWidget(unittest.TestCase):
 		self.assertIn('"/app"', body)
 		self.assertIn("/assets/lending_assistant/", body)
 		self.assertIn("window.location.hostname", body)
+		self.assertIn('.replace(/\\.$/, "")', body)  # trailing-dot host (M6-R6)
+		self.assertIn("%25", body)  # double-encoded path (M6-R6)

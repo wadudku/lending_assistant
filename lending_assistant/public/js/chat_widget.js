@@ -80,10 +80,12 @@ frappe.provide("lending_assistant");
 			return null;
 		}
 		if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-		if (!href.startsWith("/") && url.hostname !== window.location.hostname) return href;
+		// a trailing dot is the same host (lending_site. = lending_site), so it must not count as "another site" (M6-R6)
+		const same_host = url.hostname.replace(/\.$/, "") === window.location.hostname.replace(/\.$/, "");
+		if (!href.startsWith("/") && !same_host) return href;
 		if (href.startsWith("//")) return null;
 		const path = url.pathname;
-		if (/\.\.|%2e|%2f|%5c|\/\/|\/\.(\/|$)/i.test(path)) return null;
+		if (/\.\.|%2e|%2f|%5c|%25|\/\/|\/\.(\/|$)/i.test(path)) return null;
 		return path === "/app" || path.startsWith("/app/") || path.startsWith("/assets/lending_assistant/") ? href : null;
 	}
 

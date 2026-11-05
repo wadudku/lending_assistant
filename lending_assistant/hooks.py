@@ -146,7 +146,7 @@ after_install = "lending_assistant.install.after_install"
 
 # G1 layer 2: the write trap. Every hook below does nothing unless a tool is running inside
 # guard.read_only_tool_context(); then it raises PermissionError("The assistant can only read.").
-# Every `before_*` / `on_*` event that frappe/model/*.py fires is here or in NOT_TRAPPED in
+# Every `before_*` / `on_*` / `after_*` event that frappe/model/*.py fires is here or in NOT_TRAPPED in
 # tests/test_guard_rework4.py, with a reason; that test fails when a Frappe upgrade adds one (M2b-R18).
 _TRAP = "lending_assistant.assistant.guard.block_if_read_only"
 doc_events = {
@@ -162,6 +162,7 @@ doc_events = {
 		"before_cancel": _TRAP,
 		"on_cancel": _TRAP,
 		"on_trash": _TRAP,
+		"after_delete": _TRAP,  # fired by delete_doc(..., for_reload=True) after the row is gone, M4a-R20
 		"before_rename": _TRAP,
 		"before_reload": _TRAP,  # fired just before a DocType row is deleted to be re-imported
 		# saving a submitted document (action "update_after_submit"), M2b-R18

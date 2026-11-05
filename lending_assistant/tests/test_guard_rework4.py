@@ -24,6 +24,13 @@ CATEGORY = "Loan Category"
 NOT_TRAPPED = {
 	"before_mapping": "frappe.model.mapper.get_mapped_doc builds a new document in memory and returns it unsaved; "
 	"saving it later goes through before_insert / before_save, which are trapped",
+	# M4a: the `after_*` events. They run after the matching `before_*` / `on_*` event passed, so a tool that gets this far
+	# has already been stopped by a trapped event. Reported to the Advisor in the M4a report (go brief item 7).
+	"after_insert": "fired by Document.insert() after before_insert, before_naming, before_validate, before_save and on_update "
+	"(all trapped) have run, so it is unreachable inside a tool context",
+	"after_rename": "fired by rename_doc() after before_rename (trapped) has passed, so it is unreachable inside a tool context",
+	"after_mapping": "frappe.model.mapper.get_mapped_doc builds a new document in memory after before_mapping and returns it "
+	"unsaved; saving it later goes through the trapped save events",
 }
 
 
@@ -65,15 +72,15 @@ def fresh_sql(query, *args):
 
 
 class TestEveryDocumentEventIsTrapped(GuardTestCase):
-	def test_every_before_and_on_event_frappe_fires_is_trapped_or_exempt(self):
+	def test_every_before_on_and_after_event_frappe_fires_is_trapped_or_exempt(self):
 		fired = fired_events()
-		for must_see in ("before_insert", "before_save", "before_update_after_submit", "before_discard", "before_change"):
+		for must_see in ("before_insert", "before_save", "before_update_after_submit", "before_discard", "before_change", "after_delete"):
 			self.assertIn(must_see, fired, "the parser found nothing: it is broken, not Frappe")
 		hooks = frappe.get_hooks("doc_events")["*"]
 		missing = [
 			f"{event} ({', '.join(where)})"
 			for event, where in sorted(fired.items())
-			if event.startswith(("before_", "on_")) and TRAP not in hooks.get(event, []) and event not in NOT_TRAPPED
+			if event.startswith(("before_", "on_", "after_")) and TRAP not in hooks.get(event, []) and event not in NOT_TRAPPED
 		]
 		self.assertEqual(missing, [], "add these to the trap in hooks.py, or to NOT_TRAPPED with a reason")
 
@@ -86,7 +93,7 @@ class TestEveryDocumentEventIsTrapped(GuardTestCase):
 
 	def test_the_eight_original_events_are_still_trapped(self):
 		hooks = frappe.get_hooks("doc_events")["*"]
-		for event in ("before_insert", "before_validate", "before_save", "on_update", "before_submit", "before_cancel", "on_trash", "before_rename"):
+		for event in ("before_insert", "before_validate", "before_save", "on_update", "before_submit", "before_cancel", "on_trash", "before_rename", "after_delete"):
 			self.assertIn(TRAP, hooks[event], event)
 
 

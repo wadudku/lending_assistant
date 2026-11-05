@@ -336,9 +336,13 @@ def read_only_tool_context(tool: str = ""):
 	Then it raises AssistantGuardError if the identity, connection, callback queues or guard flag had to be put back
 	or could not be, or if the savepoint was gone.
 
-	Not covered: a `BaseException` that is not an `Exception` (KeyboardInterrupt, SystemExit) raised by steps 1-3
-	skips the steps after it except the reset in step 4, which is in a `finally`. A COMMIT that already happened on
-	another connection, and a reference the tool kept to a swapped-in connection, are known limits (DECISIONS #46, #47).
+	Not covered: a `BaseException` that is not an `Exception` (KeyboardInterrupt, SystemExit). Step 1 runs inside a
+	`try ... finally` whose `finally` holds steps 2-4, so a `BaseException` raised in step 1 skips nothing. One raised
+	in step 2 or step 3 is not caught by their `except Exception`: it skips the rest of the block (the savepoint
+	rollback, the violation log and the AssistantGuardError), and only the `finally` of step 4 runs (flag, transaction
+	control and write counter reset; the savepoint stays open until the request's own rollback). A COMMIT that
+	already happened on another connection, and a reference the tool kept to a swapped-in connection, are known
+	limits (DECISIONS #46, #47).
 	"""
 	ctx = ReadOnlyContext(tool)
 	identity = _capture_identity()

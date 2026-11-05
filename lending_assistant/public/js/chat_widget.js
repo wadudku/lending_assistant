@@ -514,12 +514,11 @@ frappe.provide("lending_assistant");
 
 		ui.panel = el("div", "ast-panel");
 		ui.panel.hidden = true;
-		ui.panel.addEventListener("keydown", function (e) {
-			if (e.key === "Escape") {
-				e.stopPropagation();
-				toggle(false);
-				ui.button.focus();
-			}
+		// One document-level Esc handler: closes the open panel wherever focus is, but leaves Esc to an open Frappe dialog.
+		document.addEventListener("keydown", function (e) {
+			if (e.key !== "Escape" || ui.panel.hidden || document.querySelector(".modal.show")) return;
+			toggle(false);
+			ui.button.focus();
 		});
 
 		const header = el("div", "ast-header");

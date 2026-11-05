@@ -174,3 +174,41 @@ class GuardTestCase(AssistantTestCase):
 		if not visible or not hidden:
 			raise AssertionError("The site needs a PL-EMI loan and a non-PL-EMI loan for the boundary tests.")
 		return visible[0], hidden[0]
+
+
+class ToolTestCase(GuardTestCase):
+	"""For the M4a tool tests: calls go through `registry.dispatch`, the way the orchestrator will call them."""
+
+	PERSONA_NAMES = ("senior", "dev", "limited", "noaccess")
+
+	def call(self, tool, **arguments):
+		from lending_assistant.assistant.tools import registry
+
+		return registry.dispatch(tool, arguments)
+
+	def data(self, result) -> dict:
+		"""The parsed envelope of a successful result."""
+		from lending_assistant.assistant import guard
+
+		self.assertFalse(result.is_error, f"expected data, got an error: {result.content}")
+		return guard.unwrap(result.content)
+
+	def error(self, result) -> str:
+		"""The message of an error result."""
+		import json
+
+		self.assertTrue(result.is_error, f"expected an error, got: {result.content[:300]}")
+		self.assertIsNone(result.source)
+		return json.loads(result.content)["error"]
+
+	def tool_entry(self, function, source="live_site", needs_switch=None):
+		"""A registry entry for a test double, with an empty strict schema."""
+		from lending_assistant.assistant.tools import registry
+
+		schema = {
+			"name": "AST-TEST-double",
+			"description": "A test double.",
+			"strict": True,
+			"input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+		}
+		return registry._entry(function, schema, needs_switch, source)

@@ -154,9 +154,18 @@ frappe.provide("lending_assistant");
 		}
 	}
 
+	// showdown turns word_with_underscores into emphasis ("howto.loan_repayment" loses its underscore). Card ids and
+	// field names are full of them, so escape a mid-word underscore outside code, links and URLs before parsing.
+	function protect_underscores(md) {
+		return md
+			.split(/(```[\s\S]*?```|`[^`\n]*`|\]\([^)\s]*\)|https?:\/\/\S+)/)
+			.map((part, i) => (i % 2 ? part : part.replace(/(\w)_(?=\w)/g, "$1\\_")))
+			.join("");
+	}
+
 	// THE render function. Frappe's markdown (showdown + its whitelist sanitiser), then harden(), badges, callouts.
 	function render_answer(container, markdown) {
-		const parsed = new DOMParser().parseFromString(frappe.markdown(String(markdown || "")), "text/html");
+		const parsed = new DOMParser().parseFromString(frappe.markdown(protect_underscores(String(markdown || ""))), "text/html");
 		harden(parsed.body);
 		badge_labels(parsed.body);
 		mark_callouts(parsed.body);
@@ -224,23 +233,21 @@ frappe.provide("lending_assistant");
 		function send(new_value, comment) {
 			if (sending) return;
 			sending = true;
-			frappe.call({
-				method: FEEDBACK,
-				type: "POST",
-				args: { message: msg.message, value: new_value, comment: comment },
-				callback: function (r) {
+			post(FEEDBACK, { message: msg.message, value: new_value, comment: comment })
+				.then(function (res) {
 					sending = false;
-					if (r && r.message) {
-						value = r.message.feedback;
+					if (res.ok && res.data.message) {
+						value = res.data.message.feedback;
 						saved_comment = comment;
 						refresh();
+					} else {
+						state.textContent = message_of(res.data) || __("Feedback could not be saved.");
 					}
-				},
-				error: function (xhr) {
+				})
+				.catch(function () {
 					sending = false;
-					state.textContent = server_message(xhr) || __("Feedback could not be saved.");
-				},
-			});
+					state.textContent = __("Feedback could not be saved.");
+				});
 		}
 
 		// The same value is not sent twice (the comment can still be added with "Send comment").
@@ -266,11 +273,12 @@ frappe.provide("lending_assistant");
 		return row;
 	}
 
-	// ---- errors from the server ------------------------------------------------------------------------------------
+	// ---- calls to ask / feedback and their errors ------------------------------------------------------------------
+	// A plain POST rather than frappe.call: Frappe's own handler turns a 403/429 into a pop-up and hides the message
+	// from the caller, and the panel has to show it. Same CSRF header, same endpoints, same cookies.
 
-	function server_message(xhr) {
+	function message_of(data) {
 		try {
-			const data = xhr && xhr.responseJSON;
 			if (data && data._server_messages) {
 				const list = JSON.parse(data._server_messages).map((m) => JSON.parse(m).message);
 				const doc = new DOMParser().parseFromString(list.join(" "), "text/html");
@@ -280,6 +288,38 @@ frappe.provide("lending_assistant");
 			/* fall through */
 		}
 		return "";
+	}
+
+	function post(method, args, signal) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			credentials: "same-origin",
+			signal: signal,
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+				Accept: "application/json",
+				"X-Frappe-CSRF-Token": frappe.csrf_token,
+			},
+			body: new URLSearchParams(args).toString(),
+		}).then(function (res) {
+			return res.text().then(function (text) {
+				let data = {};
+				try {
+					data = JSON.parse(text);
+				} catch (e) {
+					/* not JSON */
+				}
+				return { ok: res.ok, status: res.status, data: data };
+			});
+		});
+	}
+
+	function server_message(xhr) {
+		try {
+			return message_of(xhr && (xhr.responseJSON || JSON.parse(xhr.responseText)));
+		} catch (e) {
+			return "";
+		}
 	}
 
 	// ---- context chip ----------------------------------------------------------------------------------------------
@@ -341,39 +381,37 @@ frappe.provide("lending_assistant");
 		if (conversation) args.conversation = conversation;
 
 		let finished = false;
+		const abort = new AbortController();
 		const finish = () => {
 			finished = true;
 			clearTimeout(timer);
 			set_busy(false);
 			ui.input.focus();
 		};
-		let xhr = null;
 		const timer = setTimeout(function () {
 			if (finished) return;
 			request_id++; // a late answer is ignored
-			if (xhr && xhr.abort) xhr.abort();
+			abort.abort();
 			finish();
 			add_line("error", __("The advisor took too long. The answer may still have been saved: open History."));
 		}, CLIENT_TIMEOUT_MS);
 
-		xhr = frappe.call({
-			method: ASK,
-			type: "POST",
-			args: args,
-			callback: function (r) {
+		post(ASK, args, abort.signal)
+			.then(function (res) {
 				if (finished || my_request !== request_id) return;
 				finish();
-				if (r && r.message) {
-					conversation = r.message.conversation;
-					add_answer(r.message);
+				if (res.ok && res.data.message) {
+					conversation = res.data.message.conversation;
+					add_answer(res.data.message);
+				} else {
+					add_line("error", message_of(res.data) || __("The assistant could not answer."));
 				}
-			},
-			error: function (xhr_err) {
+			})
+			.catch(function () {
 				if (finished || my_request !== request_id) return;
 				finish();
-				add_line("error", server_message(xhr_err) || __("The assistant could not answer."));
-			},
-		});
+				add_line("error", __("The assistant could not be reached."));
+			});
 	}
 
 	// ---- conversations ---------------------------------------------------------------------------------------------

@@ -373,6 +373,8 @@ APP_GRANTS = [
 			"LABELS_MISSING_NOTICE",
 		)
 	],
+	# M5: `ask` returns the labels found in the answer (the same rule as the orchestrator)
+	(f"{ASSISTANT}.prompts", "find_labels", ("api/chat.py",), False),
 	*[
 		(f"{ASSISTANT}.trace", name, ("assistant/orchestrator.py",), False)
 		for name in (

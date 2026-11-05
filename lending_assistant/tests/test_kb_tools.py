@@ -99,6 +99,21 @@ class TestKnowledgeTools(AssistantTestCase):
 		self.assertEqual(envelope.count("</data>"), 1)
 		self.assertEqual(envelope.count("<data "), 1)
 
+	def test_schemas_use_no_keyword_that_strict_mode_does_not_support(self):
+		unsupported = {"maxLength", "minLength", "pattern", "minimum", "maximum", "minItems", "maxItems", "format"}
+
+		def walk(node):
+			if isinstance(node, dict):
+				self.assertFalse(unsupported & set(node), node)
+				for value in node.values():
+					walk(value)
+			elif isinstance(node, list):
+				for value in node:
+					walk(value)
+
+		for schema in knowledge.SCHEMAS:
+			walk(schema["input_schema"])
+
 	def test_schemas_are_strict(self):
 		for schema in knowledge.SCHEMAS:
 			with self.subTest(tool=schema["name"]):

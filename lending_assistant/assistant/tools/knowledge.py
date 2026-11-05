@@ -32,7 +32,7 @@ CARD_FIELDS = (
 
 
 def _string_or_null(description: str) -> dict:
-	return {"type": ["string", "null"], "maxLength": MAX_ARG, "description": description}
+	return {"type": ["string", "null"], "description": description}
 
 
 LOOKUP_KNOWLEDGE_SCHEMA = {
@@ -64,7 +64,7 @@ GET_CARD_SCHEMA = {
 	"strict": True,
 	"input_schema": {
 		"type": "object",
-		"properties": {"card_id": {"type": "string", "maxLength": MAX_ARG, "description": "A card id from lookup_knowledge or search_knowledge."}},
+		"properties": {"card_id": {"type": "string", "description": "A card id from lookup_knowledge or search_knowledge (at most 200 characters)."}},
 		"required": ["card_id"],
 		"additionalProperties": False,
 	},
@@ -76,7 +76,7 @@ SEARCH_KNOWLEDGE_SCHEMA = {
 	"input_schema": {
 		"type": "object",
 		"properties": {
-			"query": {"type": "string", "maxLength": 500, "description": "Words describing what to find."},
+			"query": {"type": "string", "description": "Words describing what to find (at most 500 characters)."},
 			"type": {
 				"type": ["string", "null"],
 				"enum": [*store.TYPES, None],

@@ -30,6 +30,8 @@ def walk(schema, path="input_schema"):
 	yield path, schema
 	for key, sub in (schema.get("properties") or {}).items():
 		yield from walk(sub, f"{path}.{key}")
+	for i, sub in enumerate(schema.get("anyOf") or []):
+		yield from walk(sub, f"{path}.anyOf[{i}]")
 	if isinstance(schema.get("items"), dict):
 		yield from walk(schema["items"], f"{path}[]")
 
@@ -61,6 +63,35 @@ class TestRegistryShape(ToolTestCase):
 		actual = {n: (e["needs_switch"], e["source"]) for n, e in registry.TOOLS.items()}
 		self.assertEqual(actual, expected)
 
+	def test_every_enum_value_matches_its_declared_type(self):
+		"""The API rejects an enum value that does not match `type` (live 400, M4b smoke), and also an enum next to a TYPE LIST,
+		so a nullable enum must be written as anyOf [{type, enum}, {type: null}]. Offline rules from the skill's strict section."""
+		kinds = {"string": str, "integer": int, "number": (int, float), "boolean": bool}
+		for name, entry in registry.TOOLS.items():
+			for path, node in walk(entry["schema"]["input_schema"]):
+				with self.subTest(tool=name, path=path):
+					if "enum" in node:
+						self.assertIsInstance(
+							node.get("type"), str, "an enum needs one plain type; use anyOf for nullable"
+						)
+						for value in node["enum"]:
+							self.assertIsInstance(value, kinds[node["type"]])
+							self.assertFalse(isinstance(value, bool) and node["type"] != "boolean")
+						self.assertEqual(len(node["enum"]), len(set(node["enum"])))
+					if "anyOf" in node:
+						self.assertTrue(all("type" in b for b in node["anyOf"]))
+						self.assertNotIn("type", node, "anyOf and type together are ambiguous")
+
+	def test_a_nullable_enum_still_validates_strictly_in_python(self):
+		schema = registry.TOOLS["search_knowledge"]["schema"]["input_schema"]
+		self.assertEqual(registry.validate_args(schema, {"query": "q", "type": None})["type"], None)
+		self.assertEqual(
+			registry.validate_args(schema, {"query": "q", "type": "brd_section"})["type"], "brd_section"
+		)
+		for bad in ("not_a_type", 5, ["brd_section"]):
+			with self.assertRaises(registry.ToolError):
+				registry.validate_args(schema, {"query": "q", "type": bad})
+
 	def test_every_schema_is_strict_compatible(self):
 		for name, entry in registry.TOOLS.items():
 			schema = entry["schema"]
@@ -76,7 +107,7 @@ class TestRegistryShape(ToolTestCase):
 						self.assertEqual(
 							sorted(node["required"]), sorted(node["properties"]), "every property is required"
 						)
-					self.assertIn("type", node)
+					self.assertTrue("type" in node or "anyOf" in node)
 
 	def test_a_nullable_argument_is_typed_with_null_and_the_others_are_not(self):
 		optional = registry.TOOLS["find_records"]["schema"]["input_schema"]["properties"]

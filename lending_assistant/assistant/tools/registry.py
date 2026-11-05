@@ -113,6 +113,8 @@ def _is_type(value, name: str) -> bool:
 
 
 def _types(spec: dict) -> list:
+	if "anyOf" in spec:
+		return [t for branch in spec["anyOf"] for t in _types(branch)]
 	kind = spec.get("type")
 	return list(kind) if isinstance(kind, list | tuple) else [kind]
 
@@ -124,6 +126,19 @@ def _plain_name(key) -> str:
 
 def _check(value, spec: dict, path: str, tool: str):
 	"""Return a cleaned copy of `value`, or raise ToolError. Never echoes a value."""
+	if (
+		"anyOf" in spec
+	):  # the first branch that accepts the value wins; each branch checks its own type and enum
+		for branch in spec["anyOf"]:
+			try:
+				return _check(value, branch, path, tool)
+			except ToolError:
+				continue
+		if not any(_is_type(value, t) for t in _types(spec)):
+			raise ToolError(
+				f"Argument '{path}' has the wrong type: expected {' or '.join(str(t) for t in _types(spec))}."
+			)
+		raise ToolError(f"Argument '{path}' is not one of the allowed values.")
 	types = _types(spec)
 	if not any(_is_type(value, t) for t in types):
 		raise ToolError(

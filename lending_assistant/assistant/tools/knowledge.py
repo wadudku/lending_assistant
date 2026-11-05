@@ -88,8 +88,8 @@ SEARCH_KNOWLEDGE_SCHEMA = {
 				"description": "Words describing what to find (at most 500 characters).",
 			},
 			"type": {
-				"type": ["string", "null"],
-				"enum": [*store.TYPES, None],
+				# The API rejects an enum next to a type list ("Enum value does not match declared type"): use anyOf.
+				"anyOf": [{"type": "string", "enum": list(store.TYPES)}, {"type": "null"}],
 				"description": "Only cards of this type, or null for all.",
 			},
 		},

@@ -222,7 +222,7 @@ CLEAN_FORMS = {
 	"assistant/access.py": """
 		import frappe
 
-		def f():
+		def roles_that_can():
 		    return frappe.get_meta("Loan").permissions  # AST-ALLOWED: permission rows from the meta
 	""",
 	"assistant/guard.py": """

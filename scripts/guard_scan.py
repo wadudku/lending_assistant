@@ -111,6 +111,8 @@ SCOPES = {
 	"kb/store.py": {"file-access": ("_read_text",)},
 	"kb/ingest.py": {"file-access": ("_read_bytes", "_write_bytes", "_list_dir", "_make_dirs", "_remove_file")},
 	"kb/validate.py": {"file-access": ("_read_text",), "not-allowed": ("_meta_of",)},
+	# M4a: the get_meta marker in access.py is accepted only in the two functions that read permissions / field info.
+	"assistant/access.py": {"not-allowed": ("describe_doctype", "roles_that_can")},
 }
 
 # --- (B) the chain allowlist -------------------------------------------------------------------------------------------
@@ -140,6 +142,7 @@ ALLOWLIST = [
 	("frappe.model.document.Document", ("**/doctype/",), "base", False),
 	("frappe.whitelist", ("api/",), "call", False),
 	("frappe.cache.*", ("assistant/ratelimit.py",), "call", False),
+	("frappe.logger", ("assistant/tools/registry.py",), "call", False),  # M4a: the file log of refusals (no database)
 	("frappe.local.request_ip", ("api/chat.py",), "read", False),
 	# marked lines only. get_meta returns a live Meta (a Document): tool code gets meta facts from guard/access helpers
 	("frappe.get_meta", (GUARD, "assistant/access.py", "install.py", "kb/validate.py"), "call", True),
@@ -182,12 +185,14 @@ _PLAIN_IMPORTS = {
 	"kb/search.py": ("math", "re"),
 	"kb/store.py": ("json", "os", "re"),
 	"kb/validate.py": ("json", "os", "re"),
+	"assistant/tools/registry.py": ("json",),
 }
 _FROM_IMPORTS = {
 	GUARD: (
 		("collections", "Counter"), ("contextlib", "contextmanager"), ("datetime", "date"), ("datetime", "datetime"),
 		("datetime", "time"), ("datetime", "timedelta"), ("decimal", "Decimal"),
 	),
+	"assistant/tools/registry.py": (("typing", "NamedTuple"),),
 }
 IMPORT_ALLOWLIST += [("import", module, None, (rel,)) for rel, modules in _PLAIN_IMPORTS.items() for module in modules]
 IMPORT_ALLOWLIST += [("from", module, name, (rel,)) for rel, pairs in _FROM_IMPORTS.items() for module, name in pairs]
@@ -210,6 +215,11 @@ APP_API = {
 	f"{ASSISTANT}.access": {"check_my_access", "roles_that_can"},
 	f"{ASSISTANT}.codereader": {"read", "search"},
 	f"{ASSISTANT}.settings": {"get_settings"},
+	# M4a tools: modules the registry imports; their names are granted to registry.py below, one by one
+	f"{ASSISTANT}.tools.knowledge": set(),
+	f"{ASSISTANT}.tools.live": set(),
+	f"{ASSISTANT}.tools.code": set(),
+	f"{ASSISTANT}.tools.registry": set(),
 	f"{ASSISTANT}.audit": set(),
 	f"{ASSISTANT}.ratelimit": set(),
 	f"{PACKAGE}.install": set(),
@@ -230,6 +240,45 @@ APP_GRANTS = [
 	(f"{ASSISTANT}.guard", "fit", ("assistant/codereader.py", "assistant/tools/knowledge.py"), False),
 	(f"{ASSISTANT}.guard", "MAX_CHARS", ("assistant/tools/knowledge.py",), False),
 	(f"{ASSISTANT}.guard", "AssistantRefused", ("assistant/codereader.py",), False),
+	# M4a
+	(f"{ASSISTANT}.guard", "readable_fields", ("assistant/access.py",), False),
+	(f"{ASSISTANT}.guard", "AssistantRefused", ("assistant/access.py",), False),
+	(f"{ASSISTANT}.codereader", "controller_path", ("assistant/access.py",), False),
+	(f"{ASSISTANT}.access", "ACTIONS", ("assistant/tools/live.py",), False),
+	(f"{ASSISTANT}.access", "describe_doctype", ("assistant/tools/live.py",), False),
+	(f"{ASSISTANT}.guard", "fit", ("assistant/tools/live.py",), False),
+	(f"{ASSISTANT}.guard", "unwrap", ("assistant/tools/live.py", "assistant/tools/registry.py"), False),
+	(f"{ASSISTANT}.guard", "MAX_ROWS", ("assistant/tools/live.py",), False),
+	(f"{ASSISTANT}.guard", "MAX_CHARS", ("assistant/tools/live.py", "assistant/tools/registry.py"), False),
+	(f"{ASSISTANT}.guard", "identity_watch", ("assistant/tools/registry.py",), False),
+	(f"{ASSISTANT}.guard", "AssistantRefused", ("assistant/tools/registry.py",), False),
+	(f"{ASSISTANT}.guard", "NOT_FOUND", ("assistant/tools/registry.py",), False),
+	(f"{ASSISTANT}.guard", "LIVE_DATA_OFF", ("assistant/tools/registry.py",), False),
+	(f"{ASSISTANT}.guard", "neutralise", ("assistant/tools/registry.py",), False),
+	(f"{ASSISTANT}.guard", "MAX_FILTERS", ("assistant/tools/registry.py",), False),
+	(f"{ASSISTANT}.guard", "MAX_FIELDS", ("assistant/tools/registry.py",), False),
+	(f"{ASSISTANT}.codereader", "OFF", ("assistant/tools/registry.py",), False),
+	(f"{ASSISTANT}.codereader", "MAX_QUERY", ("assistant/tools/registry.py",), False),
+	*[
+		(f"{ASSISTANT}.tools.{module}", name, ("assistant/tools/registry.py",), False)
+		for module, names in {
+			"knowledge": (
+				"lookup_knowledge", "get_card", "search_knowledge",
+				"LOOKUP_KNOWLEDGE_SCHEMA", "GET_CARD_SCHEMA", "SEARCH_KNOWLEDGE_SCHEMA",
+			),
+			"live": (
+				"get_screen_help", "check_my_access", "find_records", "get_record",
+				"GET_SCREEN_HELP_SCHEMA", "CHECK_MY_ACCESS_SCHEMA", "FIND_RECORDS_SCHEMA", "GET_RECORD_SCHEMA",
+			),
+			"code": ("search_code", "read_code", "SEARCH_CODE_SCHEMA", "READ_CODE_SCHEMA"),
+		}.items()
+		for name in names
+	],
+	# reserved for M4b: the orchestrator is the only caller of the dispatcher
+	*[
+		(f"{ASSISTANT}.tools.registry", name, ("assistant/orchestrator.py",), True)
+		for name in ("dispatch", "tool_definitions", "ToolResult", "ToolError")
+	],
 	(f"{ASSISTANT}.settings", "get_api_key", ("assistant/orchestrator.py",), True),
 	(f"{ASSISTANT}.audit", "CONVERSATION", ("api/chat.py",), False),
 	(f"{ASSISTANT}.audit", "MESSAGE", ("api/chat.py",), False),

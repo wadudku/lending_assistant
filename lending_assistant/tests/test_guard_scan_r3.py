@@ -44,7 +44,7 @@ R11_APP_INTERNALS = [
 	("star import of an app module", "app-api", f"from {G} import *\n", TOOL),
 	("module that is not on the API table", "app-api", "from lending_assistant.install import seed_defaults\n", TOOL),
 	("another package", "app-api", "import lending_assistant.api.chat\n", TOOL),
-	("an app module that does not exist yet", "app-api", "from lending_assistant.assistant.tools import registry\n", TOOL),
+	("an app module that does not exist yet", "app-api", "from lending_assistant.assistant.tools import orchestrator\n", TOOL),
 	("the package as a value", "app-api", "import lending_assistant\n\nx = lending_assistant\n", TOOL),
 	("access private", "app-api", f"from lending_assistant.assistant import access\n\ndef f():\n    return access._thing()\n", TOOL),
 	("access unlisted", "app-api", f"from lending_assistant.assistant import access\n\ndef f():\n    return access.ACTIONS\n", TOOL),
@@ -174,7 +174,14 @@ class TestScanR3(AssistantTestCase):
 			for module, name, _files, _reserved in scanner.APP_GRANTS:
 				self.assertTrue(hasattr(importlib.import_module(module), name), f"grant for {module}.{name}: no such name")
 			# a grant is for the files it names and for nobody else
-			self.assertEqual([g for g in scanner.APP_GRANTS if g[3]][0][:2], (f"{scanner.ASSISTANT}.settings", "get_api_key"))
+			# M4a: the reserved grants are the API key reader and the dispatcher, both for the orchestrator (M4b) only
+			reserved = {g[:2] for g in scanner.APP_GRANTS if g[3]}
+			self.assertEqual(
+				reserved,
+				{(f"{scanner.ASSISTANT}.settings", "get_api_key")}
+				| {(f"{scanner.ASSISTANT}.tools.registry", n) for n in ("dispatch", "tool_definitions", "ToolResult", "ToolError")},
+			)
+			self.assertTrue(all(g[2] == ("assistant/orchestrator.py",) for g in scanner.APP_GRANTS if g[3]))
 		finally:
 			sys.modules.pop(spec.name, None)
 
@@ -185,8 +192,15 @@ class TestScanR3(AssistantTestCase):
 
 	def test_R12_get_meta_is_allowed_only_on_marked_lines_in_guard_access_and_install(self):
 		code = "import frappe\n\ndef f():\n    return frappe.get_meta('Loan')  # AST-ALLOWED: meta facts\n"
-		for path in ("assistant/guard.py", "assistant/access.py", "install.py"):
+		for path in ("assistant/guard.py", "install.py"):
 			self.assertClean({path: code}, path)
+		# access.py: only inside describe_doctype and roles_that_can (M4a scope)
+		for function in ("describe_doctype", "roles_that_can"):
+			self.assertClean({"assistant/access.py": code.replace("def f()", f"def {function}()")}, function)
+		root = self.make_tree({"assistant/access.py": code})
+		result = run("--root", root)
+		self.assertEqual(result.returncode, 1, result.stdout)
+		self.assertIn("accepted only inside describe_doctype, roles_that_can (R17)", result.stdout)
 
 	def test_R12_ordinary_type_uses_are_not_flagged(self):
 		self.assertClean(

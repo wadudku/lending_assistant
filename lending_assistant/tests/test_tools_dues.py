@@ -56,9 +56,7 @@ class TestLoanDuesLogic(ToolTestCase):
 		with (
 			mock.patch.object(dues.guard, "read_doc", return_value=loan_env),
 			mock.patch.object(dues.guard, "list_records", side_effect=lister),
-			mock.patch.object(
-				dues.guard, "readable_fields", return_value=list(row(1)) + ["loan", "docstatus"]
-			),
+			mock.patch.object(dues.guard, "readable_fields", return_value=[*row(1), "loan", "docstatus"]),
 		):
 			result = dues.get_loan_dues("L-1", as_on)
 		return guard.unwrap(result), lister

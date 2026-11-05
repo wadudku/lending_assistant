@@ -42,8 +42,9 @@ class TestAsk(AssistantTestCase):
 		dev_before = len(frappe.get_list("Assistant Message", pluck="name", limit_page_length=0))
 
 		result = chat.ask("What is DPD?", route="Form/Loan/AST-LOAN-1", depth="Technical", deep=1)
-		self.assertEqual(set(result), {"conversation", "message", "answer"})
-		self.assertEqual(result["answer"], "Stub reply: the advisor isn't connected yet.")
+		self.assertEqual(set(result), {"conversation", "message", "answer", "status"})
+		self.assertEqual(result["answer"], "The advisor has no API key yet.")
+		self.assertEqual(result["status"], "error")
 
 		self.assertEqual(
 			len(frappe.get_list("Assistant Message", pluck="name", limit_page_length=0)), dev_before + 1
@@ -59,7 +60,7 @@ class TestAsk(AssistantTestCase):
 		self.assertEqual(message.route, "Form/Loan/AST-LOAN-1")
 		self.assertEqual((message.route_doctype, message.route_docname), ("Loan", "AST-LOAN-1"))
 		self.assertEqual(
-			(message.depth, message.deep, message.status, message.model), ("Technical", 1, "ok", "stub")
+			(message.depth, message.deep, message.status, message.model), ("Technical", 1, "error", "stub")
 		)
 		self.assertIn("Assistant User", frappe.parse_json(message.roles))
 		self.assertGreaterEqual(message.latency_ms, 0)
@@ -119,7 +120,7 @@ class TestAsk(AssistantTestCase):
 
 		# a different user is not affected: the limit is per user, not shared
 		self.as_user("senior")
-		self.assertEqual(chat.ask("senior one")["answer"], chat.STUB_ANSWER)
+		self.assertEqual(chat.ask("senior one")["answer"], "The advisor has no API key yet.")
 		frappe.set_user("Administrator")
 		self.assertEqual(self.counts(), (before[0] + 1, before[1] + 1), "rate-limited calls write nothing")
 

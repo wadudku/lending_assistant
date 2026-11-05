@@ -5,6 +5,8 @@ back at the end of the class by IntegrationTestCase, so nothing here may call fr
 (the per-user rate-limit counters, role caches) is not rolled back, so it is cleaned explicitly.
 """
 
+from unittest import mock
+
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import now_datetime
@@ -25,6 +27,8 @@ SETTINGS_FIELDS = (
 	"live_data",
 	"code_reader",
 	"web_search",
+	"default_effort",
+	"deep_effort",
 	"default_model",
 	"deep_model",
 	"max_tokens",
@@ -44,6 +48,19 @@ class AssistantTestCase(IntegrationTestCase):
 
 	def setUp(self):
 		super().setUp()
+		# No test may reach the network or use the real key the owner enters in Assistant Settings: by default there is
+		# no key (the stub path) and building a client fails loudly. Tests that need a key patch these themselves.
+		from lending_assistant.assistant import orchestrator
+
+		def no_client(key):
+			raise AssertionError("A test tried to build the Claude client.")
+
+		for patcher in (
+			mock.patch.object(orchestrator, "_api_key", return_value=None),
+			mock.patch.object(orchestrator, "_make_client", side_effect=no_client),
+		):
+			patcher.start()
+			self.addCleanup(patcher.stop)
 		frappe.set_user("Administrator")
 		self._original = {f: frappe.get_doc("Assistant Settings").get(f) for f in SETTINGS_FIELDS}
 		self.configure(enabled=1)

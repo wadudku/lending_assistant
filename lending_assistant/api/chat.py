@@ -1,7 +1,8 @@
 """Chat endpoints (G7). The only whitelisted methods in the app: `ask` and `feedback` (`findings.save` comes in M6).
 
 Both are POST-only, never `allow_guest`, require the role Assistant User, and read Assistant Settings
-only through `assistant.settings`. In M1 `ask` returns a stub reply: no Claude call, no tools.
+only through `assistant.settings`. `ask` hands the question to `orchestrator.run` (M4b); with no API key set it answers
+"The advisor has no API key yet." (status error, no network). The audit row is written on every path.
 """
 
 import time
@@ -9,13 +10,12 @@ import time
 import frappe
 from frappe import _
 
-from lending_assistant.assistant import audit, ratelimit
+from lending_assistant.assistant import audit, orchestrator, ratelimit
 from lending_assistant.assistant.settings import get_settings
 
 ASSISTANT_USER = "Assistant User"
-STUB_ANSWER = "Stub reply: the advisor isn't connected yet."
 NOT_FOUND = "I can't find a record with that ID that you have access to."  # G4 wording
-STUB_MODEL = "stub"
+HISTORY_TURNS = 4  # earlier exchanges of the same conversation that the model sees (as plain text)
 
 MAX_QUESTION = 4000
 MAX_ROUTE = 500
@@ -44,29 +44,51 @@ def ask(question=None, conversation=None, route=None, depth="Both", deep=0):
 
 	question, route, depth, deep = _validate(question, route, depth, deep)
 
+	history = []
 	if conversation:
 		conversation = _own_record(audit.CONVERSATION, conversation)
+		history = _history(conversation)
 	else:
 		conversation = audit.start_conversation(
 			route, title=question
 		)  # title is a derived label, see audit.make_title
 
 	route_doctype, route_docname = _split_route(route)
+	outcome = orchestrator.run(
+		question,
+		route_doctype=route_doctype,
+		route_docname=route_docname,
+		depth=depth,
+		deep=deep,
+		history=history,
+	)
 	message = audit.log_exchange(
 		conversation,
 		question=question,
-		answer=STUB_ANSWER,
+		answer=outcome["answer"],
 		route=route,
 		route_doctype=route_doctype,
 		route_docname=route_docname,
 		depth=depth,
 		deep=deep,
-		status="ok",
-		model=STUB_MODEL,
+		status=outcome["status"],
+		model=outcome["model"],
 		roles=frappe.get_roles(),
+		tokens_in=outcome["tokens_in"],
+		tokens_out=outcome["tokens_out"],
 		latency_ms=int((time.monotonic() - started) * 1000),
+		tool_calls=outcome["tool_calls"],
+		records_read=outcome["records_read"],
+		code_files_read=outcome["code_files_read"],
+		cards_used=outcome["cards_used"],
+		web_sources=outcome["web_sources"],
 	)
-	return {"conversation": conversation, "message": message, "answer": STUB_ANSWER}
+	return {
+		"conversation": conversation,
+		"message": message,
+		"answer": outcome["answer"],
+		"status": outcome["status"],
+	}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -184,3 +206,20 @@ def _split_route(route: str):
 	if len(parts) >= 2 and parts[0].lower() in ("list", "report", "query-report"):
 		return parts[1], ""
 	return "", ""
+
+
+def _history(conversation: str) -> list:
+	"""The last HISTORY_TURNS finished exchanges (status ok or limited) of the session user's own conversation, oldest
+	first, as `{question, answer}`. The caller has checked ownership. Replayed as plain text only (M4b)."""
+	rows = frappe.get_list(  # AST-ALLOWED: own audit log, runs as the session user
+		audit.MESSAGE,
+		filters={
+			"conversation": conversation,
+			"user": frappe.session.user,
+			"status": ["in", ["ok", "limited"]],
+		},
+		fields=["question", "answer"],
+		order_by="creation desc",
+		limit=HISTORY_TURNS,
+	)
+	return [{"question": r.question or "", "answer": r.answer or ""} for r in reversed(rows)]

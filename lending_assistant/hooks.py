@@ -148,11 +148,14 @@ after_install = "lending_assistant.install.after_install"
 # guard.read_only_tool_context(); then it raises PermissionError("The assistant can only read.").
 # Every `before_*` / `on_*` / `after_*` event that frappe/model/*.py fires is here or in NOT_TRAPPED in
 # tests/test_guard_rework4.py, with a reason; that test fails when a Frappe upgrade adds one (M2b-R18).
+# `before_mapping` and `after_mapping` stay untrapped: get_mapped_doc only builds an unsaved document in memory, and saving
+# it goes through the trapped save events.
 _TRAP = "lending_assistant.assistant.guard.block_if_read_only"
 doc_events = {
 	"*": {
 		# insert, save, submit, cancel, delete, rename
 		"before_insert": _TRAP,
+		"after_insert": _TRAP,  # M4a: trapped as well (#147)
 		"before_naming": _TRAP,  # naming takes the next number from a series (a write)
 		"before_validate": _TRAP,
 		"before_save": _TRAP,
@@ -164,6 +167,7 @@ doc_events = {
 		"on_trash": _TRAP,
 		"after_delete": _TRAP,  # fired by delete_doc(..., for_reload=True) after the row is gone, M4a-R20
 		"before_rename": _TRAP,
+		"after_rename": _TRAP,  # M4a: trapped as well (#147)
 		"before_reload": _TRAP,  # fired just before a DocType row is deleted to be re-imported
 		# saving a submitted document (action "update_after_submit"), M2b-R18
 		"before_update_after_submit": _TRAP,

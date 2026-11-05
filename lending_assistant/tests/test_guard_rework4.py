@@ -24,11 +24,7 @@ CATEGORY = "Loan Category"
 NOT_TRAPPED = {
 	"before_mapping": "frappe.model.mapper.get_mapped_doc builds a new document in memory and returns it unsaved; "
 	"saving it later goes through before_insert / before_save, which are trapped",
-	# M4a: the `after_*` events. They run after the matching `before_*` / `on_*` event passed, so a tool that gets this far
-	# has already been stopped by a trapped event. Reported to the Advisor in the M4a report (go brief item 7).
-	"after_insert": "fired by Document.insert() after before_insert, before_naming, before_validate, before_save and on_update "
-	"(all trapped) have run, so it is unreachable inside a tool context",
-	"after_rename": "fired by rename_doc() after before_rename (trapped) has passed, so it is unreachable inside a tool context",
+	# M4a: `after_insert` and `after_rename` are trapped as well (#147). `after_mapping` stays untrapped, reason below.
 	"after_mapping": "frappe.model.mapper.get_mapped_doc builds a new document in memory after before_mapping and returns it "
 	"unsaved; saving it later goes through the trapped save events",
 }
@@ -114,6 +110,8 @@ class TestEveryDocumentEventIsTrapped(GuardTestCase):
 			"on_trash",
 			"before_rename",
 			"after_delete",
+			"after_insert",
+			"after_rename",
 		):
 			self.assertIn(TRAP, hooks[event], event)
 

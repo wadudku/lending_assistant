@@ -28,6 +28,15 @@ def _json(value):
 	return None if value is None else json.dumps(value, default=str)
 
 
+def parse_list(text) -> list:
+	"""A stored JSON list column (tool_calls) back as a list; anything else is an empty list."""
+	try:
+		value = json.loads(text) if text else []
+	except ValueError:
+		return []
+	return value if isinstance(value, list) else []
+
+
 def start_conversation(route: str | None = None, title: str | None = None) -> str:
 	"""Create a conversation for the session user and return its name."""
 	conversation = frappe.new_doc(CONVERSATION)  # AST-ALLOWED: app's own audit log

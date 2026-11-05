@@ -393,6 +393,7 @@ APP_GRANTS = [
 	(f"{ASSISTANT}.audit", "start_conversation", ("api/chat.py",), False),
 	(f"{ASSISTANT}.audit", "log_exchange", ("api/chat.py",), False),
 	(f"{ASSISTANT}.audit", "set_feedback", ("api/chat.py",), False),
+	(f"{ASSISTANT}.audit", "parse_list", ("api/chat.py",), False),
 	(f"{ASSISTANT}.ratelimit", "exceeded", ("api/chat.py",), False),
 	(f"{ASSISTANT}.ratelimit", "USER_PREFIX", ("api/chat.py",), False),
 	(f"{ASSISTANT}.ratelimit", "IP_PREFIX", ("api/chat.py",), False),

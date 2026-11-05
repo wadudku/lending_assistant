@@ -109,6 +109,21 @@ class TestAskWiring(AskCase):
 			],
 		)
 
+	def test_a_replayed_turn_carries_a_note_of_the_tools_it_used(self):
+		script = [
+			cf.response("tool_use", cf.tool_use("t1", "get_card", {"card_id": "c1"})),
+			cf.response("end_turn", cf.text(LABELLED)),
+		]
+		first, _ = self.ask(script, dispatch=lambda n, a=None: registry_ok(), question="First question?")
+		_, client = self.ask(
+			[cf.response("end_turn", cf.text(LABELLED))],
+			question="Second?",
+			conversation=first["conversation"],
+		)
+		replayed = client.calls[0]["messages"][1]["content"]
+		self.assertTrue(replayed.startswith(LABELLED))
+		self.assertIn("(Tools used in that answer, results not repeated: get_card(card_id=c1): ok)", replayed)
+
 	def test_history_never_comes_from_somebody_elses_conversation(self):
 		first, _ = self.ask([cf.response("end_turn", cf.text(LABELLED))], question="Private?")
 		with self.assertRaises(frappe.DoesNotExistError):

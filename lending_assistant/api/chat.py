@@ -210,7 +210,7 @@ def _split_route(route: str):
 
 def _history(conversation: str) -> list:
 	"""The last HISTORY_TURNS finished exchanges (status ok or limited) of the session user's own conversation, oldest
-	first, as `{question, answer}`. The caller has checked ownership. Replayed as plain text only (M4b)."""
+	first, as `{question, answer, tool_calls}`. The caller has checked ownership. Replayed as plain text only (M4b)."""
 	rows = frappe.get_list(  # AST-ALLOWED: own audit log, runs as the session user
 		audit.MESSAGE,
 		filters={
@@ -218,8 +218,15 @@ def _history(conversation: str) -> list:
 			"user": frappe.session.user,
 			"status": ["in", ["ok", "limited"]],
 		},
-		fields=["question", "answer"],
+		fields=["question", "answer", "tool_calls"],
 		order_by="creation desc",
 		limit=HISTORY_TURNS,
 	)
-	return [{"question": r.question or "", "answer": r.answer or ""} for r in reversed(rows)]
+	return [
+		{
+			"question": r.question or "",
+			"answer": r.answer or "",
+			"tool_calls": audit.parse_list(r.tool_calls),
+		}
+		for r in reversed(rows)
+	]

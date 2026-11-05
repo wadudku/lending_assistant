@@ -17,7 +17,7 @@ from lending_assistant.tests.base import ToolTestCase
 
 PLAN_TOOLS = {
 	"lookup_knowledge", "get_card", "search_knowledge", "get_screen_help", "check_my_access", "find_records",
-	"get_record", "search_code", "read_code",
+	"get_record", "search_code", "read_code", "get_loan_dues",
 }  # fmt: skip
 BANNED_KEYWORDS = {
 	"maxLength", "minLength", "pattern", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
@@ -37,7 +37,7 @@ def walk(schema, path="input_schema"):
 class TestRegistryShape(ToolTestCase):
 	def test_the_registry_has_exactly_the_plan_tools_and_none_of_the_later_ones(self):
 		self.assertEqual(set(registry.TOOLS), PLAN_TOOLS)
-		for later in ("get_loan_dues", "search_findings", "suggest_finding", "web_search"):
+		for later in ("search_findings", "suggest_finding", "web_search"):
 			self.assertNotIn(later, registry.TOOLS)
 
 	def test_every_entry_has_the_keys_a_valid_switch_and_a_valid_source(self):
@@ -56,6 +56,7 @@ class TestRegistryShape(ToolTestCase):
 			"get_screen_help": (None, "live_site"), "check_my_access": (None, "live_site"),
 			"find_records": ("live_data", "live_site"), "get_record": ("live_data", "live_site"),
 			"search_code": ("code_reader", "code"), "read_code": ("code_reader", "code"),
+			"get_loan_dues": ("live_data", "live_site"),
 		}  # fmt: skip
 		actual = {n: (e["needs_switch"], e["source"]) for n, e in registry.TOOLS.items()}
 		self.assertEqual(actual, expected)
@@ -100,7 +101,8 @@ class TestRegistryShape(ToolTestCase):
 		self.assertTrue(registry.TOOLS[defs[0]["name"]]["schema"]["input_schema"]["properties"])
 		self.configure(live_data=0)
 		self.assertEqual(
-			{d["name"] for d in registry.tool_definitions()}, PLAN_TOOLS - {"find_records", "get_record"}
+			{d["name"] for d in registry.tool_definitions()},
+			PLAN_TOOLS - {"find_records", "get_record", "get_loan_dues"},
 		)
 		self.configure(live_data=1, code_reader=0)
 		self.assertEqual(
@@ -118,7 +120,6 @@ class TestValidation(ToolTestCase):
 
 	def test_unknown_tools_are_refused_without_listing_the_real_ones(self):
 		for name in (
-			"get_loan_dues",
 			"__import__",
 			"",
 			"GET_RECORD",

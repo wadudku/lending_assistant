@@ -57,7 +57,9 @@ class TestAnthropicScan(AssistantTestCase):
 		self.assertEqual(result.returncode, 1, result.stdout)
 
 	def test_plain_import_is_clean_in_the_orchestrator(self):
-		result = self.scan("assistant/orchestrator.py", "import anthropic\n\n\ndef f():\n    return anthropic\n")
+		result = self.scan(
+			"assistant/orchestrator.py", "import anthropic\n\n\ndef f():\n    return anthropic\n"
+		)
 		self.assertEqual(result.returncode, 0, result.stdout)
 
 	def test_aliases_and_from_forms_are_hits_even_in_the_orchestrator(self):

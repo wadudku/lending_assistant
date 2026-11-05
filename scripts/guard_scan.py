@@ -215,6 +215,7 @@ _FROM_IMPORTS = {
 		("decimal", "Decimal"),
 	),
 	"assistant/tools/registry.py": (("typing", "NamedTuple"),),
+	"assistant/tools/dues.py": (("datetime", "date"), ("decimal", "Decimal")),
 }
 IMPORT_ALLOWLIST += [
 	("import", module, None, (rel,)) for rel, modules in _PLAIN_IMPORTS.items() for module in modules
@@ -267,6 +268,7 @@ APP_API = {
 	f"{ASSISTANT}.tools.knowledge": set(),
 	f"{ASSISTANT}.tools.live": set(),
 	f"{ASSISTANT}.tools.code": set(),
+	f"{ASSISTANT}.tools.dues": set(),
 	f"{ASSISTANT}.tools.registry": set(),
 	f"{ASSISTANT}.audit": set(),
 	f"{ASSISTANT}.ratelimit": set(),
@@ -305,6 +307,12 @@ APP_GRANTS = [
 	(f"{ASSISTANT}.guard", "unwrap", ("assistant/tools/live.py", "assistant/tools/registry.py"), False),
 	(f"{ASSISTANT}.guard", "MAX_ROWS", ("assistant/tools/live.py",), False),
 	(f"{ASSISTANT}.guard", "MAX_CHARS", ("assistant/tools/live.py", "assistant/tools/registry.py"), False),
+	# M4b: get_loan_dues
+	(f"{ASSISTANT}.guard", "unwrap", ("assistant/tools/dues.py",), False),
+	(f"{ASSISTANT}.guard", "MAX_ROWS", ("assistant/tools/dues.py",), False),
+	(f"{ASSISTANT}.guard", "fit", ("assistant/tools/dues.py",), False),
+	(f"{ASSISTANT}.guard", "readable_fields", ("assistant/tools/dues.py",), False),
+	(f"{ASSISTANT}.guard", "AssistantRefused", ("assistant/tools/dues.py",), False),
 	(f"{ASSISTANT}.guard", "identity_watch", ("assistant/tools/registry.py",), False),
 	(f"{ASSISTANT}.guard", "AssistantRefused", ("assistant/tools/registry.py",), False),
 	(f"{ASSISTANT}.guard", "NOT_FOUND", ("assistant/tools/registry.py",), False),
@@ -336,6 +344,7 @@ APP_GRANTS = [
 				"GET_RECORD_SCHEMA",
 			),
 			"code": ("search_code", "read_code", "SEARCH_CODE_SCHEMA", "READ_CODE_SCHEMA"),
+			"dues": ("get_loan_dues", "GET_LOAN_DUES_SCHEMA"),
 		}.items()
 		for name in names
 	],

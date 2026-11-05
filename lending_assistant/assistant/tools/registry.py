@@ -27,7 +27,7 @@ from typing import NamedTuple
 import frappe
 
 from lending_assistant.assistant import codereader, guard, settings
-from lending_assistant.assistant.tools import code, knowledge, live
+from lending_assistant.assistant.tools import code, dues, knowledge, live
 
 MAX_STRING = 200  # characters of any string argument, unless LIMITS says otherwise
 MAX_ARRAY = 50  # items of any array argument, unless LIMITS says otherwise
@@ -85,6 +85,7 @@ TOOLS = {
 	"check_my_access": _entry(live.check_my_access, live.CHECK_MY_ACCESS_SCHEMA, None, "live_site"),
 	"find_records": _entry(live.find_records, live.FIND_RECORDS_SCHEMA, "live_data", "live_site"),
 	"get_record": _entry(live.get_record, live.GET_RECORD_SCHEMA, "live_data", "live_site"),
+	"get_loan_dues": _entry(dues.get_loan_dues, dues.GET_LOAN_DUES_SCHEMA, "live_data", "live_site"),
 	"search_code": _entry(code.search_code, code.SEARCH_CODE_SCHEMA, "code_reader", "code"),
 	"read_code": _entry(code.read_code, code.READ_CODE_SCHEMA, "code_reader", "code"),
 }

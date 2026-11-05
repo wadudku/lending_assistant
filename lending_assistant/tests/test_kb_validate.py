@@ -31,8 +31,11 @@ class TestValidate(AssistantTestCase):
 
 	def test_a_clean_card_has_no_findings(self):
 		findings, _ = check(
-			doctypes=["Loan"], fields=["Loan.Status", "Loan.reference_number"], options=["Loan.Status=Sanctioned"],
-			menus=["Lending > Loan Management > Loan"], code_refs=["lending/hooks.py", "lending/hooks.py:12", "lending/hooks.py:12-20"],
+			doctypes=["Loan"],
+			fields=["Loan.Status", "Loan.reference_number"],
+			options=["Loan.Status=Sanctioned"],
+			menus=["Lending > Loan Management > Loan"],
+			code_refs=["lending/hooks.py", "lending/hooks.py:12", "lending/hooks.py:12-20"],
 		)
 		self.assertEqual(findings, [])
 
@@ -55,7 +58,13 @@ class TestValidate(AssistantTestCase):
 		self.assertEqual(len(check(options=["Loan.Nope=Draft"])[0]), 1)
 
 	def test_dotdot_and_foreign_code_refs_are_findings(self):
-		for ref in ("lending/../frappe/hooks.py", "../etc/passwd", "/etc/passwd", "other/x.py", "lending/../../x"):
+		for ref in (
+			"lending/../frappe/hooks.py",
+			"../etc/passwd",
+			"/etc/passwd",
+			"other/x.py",
+			"lending/../../x",
+		):
 			with self.subTest(ref=ref):
 				self.assertEqual(len(check(code_refs=[ref])[0]), 1)
 

@@ -58,9 +58,16 @@ class TestSetup(AssistantTestCase):
 		meta = frappe.get_meta("Assistant Settings")
 		for field in ("enabled", "live_data", "code_reader", "web_search"):
 			self.assertEqual(str(meta.get_field(field).default), "0", field)
-		for field, value in (("max_tokens", "16000"), ("default_effort", "high"), ("deep_effort", "medium"), ("rate_limit_per_user", "30"),
-			("rate_limit_window_seconds", "3600"), ("retention_days", "180"),
-			("default_model", "claude-sonnet-5-5"), ("deep_model", "claude-opus-5-5")):
+		for field, value in (
+			("max_tokens", "16000"),
+			("default_effort", "high"),
+			("deep_effort", "medium"),
+			("rate_limit_per_user", "30"),
+			("rate_limit_window_seconds", "3600"),
+			("retention_days", "180"),
+			("default_model", "claude-sonnet-5-5"),
+			("deep_model", "claude-opus-5-5"),
+		):
 			self.assertEqual(str(meta.get_field(field).default), value, field)
 
 		# empty the tables, then seed
@@ -113,7 +120,10 @@ class TestSetup(AssistantTestCase):
 			result = install.seed_defaults()
 		self.assertEqual(result["skipped_missing_doctypes"], ["Loan Partner"])
 		self.assertEqual(len(result["added_doctypes"]), 19)
-		self.assertNotIn("Loan Partner", [r.allowed_doctype for r in frappe.get_doc("Assistant Settings").doctype_allowlist])
+		self.assertNotIn(
+			"Loan Partner",
+			[r.allowed_doctype for r in frappe.get_doc("Assistant Settings").doctype_allowlist],
+		)
 
 	def test_settings_not_readable(self):
 		secret = "sk-ast-test-DUMMY-not-a-real-key"  # never a real key; rolled back with the class

@@ -75,7 +75,9 @@ def _check_relative(rel_parts: list[str]) -> bool:
 
 
 def _is_binary(real: str) -> bool:
-	with open(real, "rb") as handle:  # AST-ALLOWED: G12: the one place that opens a caller-supplied path, after _resolve()
+	with open(  # AST-ALLOWED: G12: the one place that opens a caller-supplied path, after _resolve()
+		real, "rb"
+	) as handle:
 		return b"\0" in handle.read(BINARY_PROBE)
 
 
@@ -125,7 +127,7 @@ def _line(text: str) -> str:
 def read(path, start_line=1, end_line=None) -> str:
 	"""Lines `start_line`..`end_line` (at most 200) of one file, as a `<data source="code">` envelope."""
 	_require_on()
-	app, root, real, display = _resolve(path)
+	_app, _root, real, display = _resolve(path)
 	if isinstance(start_line, bool) or not isinstance(start_line, int) or start_line < 1:
 		raise frappe.ValidationError("start_line must be a whole number of 1 or more.")
 	if end_line is None:
@@ -137,7 +139,9 @@ def read(path, start_line=1, end_line=None) -> str:
 
 	lines = []
 	more = False
-	with open(real, encoding="utf-8", errors="replace") as handle:  # AST-ALLOWED: G12: path already validated by _resolve()
+	with open(  # AST-ALLOWED: G12: path already validated by _resolve()
+		real, encoding="utf-8", errors="replace"
+	) as handle:
 		for number, text in enumerate(handle, start=1):
 			if number < start_line:
 				continue
@@ -168,7 +172,10 @@ def search(query, app=None, path_glob=None) -> str:
 	if app is not None and (not isinstance(app, str) or app not in _roots()):
 		raise CodeReaderRefused(REFUSED)
 	if path_glob is not None and (
-		not isinstance(path_glob, str) or len(path_glob) > 100 or ".." in path_glob or path_glob.startswith("/")
+		not isinstance(path_glob, str)
+		or len(path_glob) > 100
+		or ".." in path_glob
+		or path_glob.startswith("/")
 	):
 		raise frappe.ValidationError("path_glob must be a short relative pattern.")
 
@@ -176,7 +183,9 @@ def search(query, app=None, path_glob=None) -> str:
 	matches, files_scanned, timed_out, capped = [], 0, False, False
 
 	for root_app, root in _roots(only=app).items():
-		for folder, dirs, files in os.walk(root, topdown=True, followlinks=False):  # AST-ALLOWED: G12: search walks allowlisted roots only
+		for folder, dirs, files in os.walk(  # AST-ALLOWED: G12: search walks allowlisted roots only
+			root, topdown=True, followlinks=False
+		):
 			dirs[:] = sorted(d for d in dirs if not _bad_segment(d))
 			rel_folder = os.path.relpath(folder, root)
 			for filename in sorted(files):
@@ -201,7 +210,9 @@ def search(query, app=None, path_glob=None) -> str:
 					):
 						continue
 					files_scanned += 1
-					with open(real, encoding="utf-8", errors="replace") as handle:  # AST-ALLOWED: G12: file already validated in this loop
+					with open(  # AST-ALLOWED: G12: file already validated in this loop
+						real, encoding="utf-8", errors="replace"
+					) as handle:
 						for number, text in enumerate(handle, start=1):
 							if query in text:
 								matches.append(f"{root_app}/{rel}:{number}: {_line(text).strip()}")

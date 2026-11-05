@@ -24,14 +24,18 @@ SIDEBAR = os.path.join(APP_ROOTS["lending"], "lending", "workspace_sidebar", "le
 
 
 def _read_text(path: str) -> str:
-	with open(path, encoding="utf-8") as handle:  # AST-ALLOWED: reads the Lending sidebar file for the menu check
+	with open(  # AST-ALLOWED: reads the Lending sidebar file for the menu check
+		path, encoding="utf-8"
+	) as handle:
 		return handle.read()
 
 
 def _meta_of(doctype: str):
 	"""The fields of a doctype as plain dicts, or None when the doctype does not exist."""
 	try:
-		meta = frappe.get_meta(doctype)  # AST-ALLOWED: read-only drift check of a doctype named in an approved card
+		meta = frappe.get_meta(  # AST-ALLOWED: read-only drift check of a doctype named in an approved card
+			doctype
+		)
 	except frappe.DoesNotExistError:
 		return None
 	return [{"label": f.label, "fieldname": f.fieldname, "options": f.options} for f in meta.fields]
@@ -101,7 +105,9 @@ def check_cards(cards: list[dict], meta_of, sidebar: set, app_roots: dict) -> tu
 			parts = path.split("/")
 			root = app_roots.get(parts[0])
 			if root is None or ".." in parts:
-				findings.append(f"{cid}: code ref {ref!r} is not inside the lending, erpnext or frappe checkout")
+				findings.append(
+					f"{cid}: code ref {ref!r} is not inside the lending, erpnext or frappe checkout"
+				)
 				continue
 			full = os.path.realpath(os.path.join(root, *parts))
 			if not full.startswith(os.path.realpath(root) + os.sep) or not os.path.exists(full):

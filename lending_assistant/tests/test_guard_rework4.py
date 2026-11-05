@@ -74,13 +74,22 @@ def fresh_sql(query, *args):
 class TestEveryDocumentEventIsTrapped(GuardTestCase):
 	def test_every_before_on_and_after_event_frappe_fires_is_trapped_or_exempt(self):
 		fired = fired_events()
-		for must_see in ("before_insert", "before_save", "before_update_after_submit", "before_discard", "before_change", "after_delete"):
+		for must_see in (
+			"before_insert",
+			"before_save",
+			"before_update_after_submit",
+			"before_discard",
+			"before_change",
+			"after_delete",
+		):
 			self.assertIn(must_see, fired, "the parser found nothing: it is broken, not Frappe")
 		hooks = frappe.get_hooks("doc_events")["*"]
 		missing = [
 			f"{event} ({', '.join(where)})"
 			for event, where in sorted(fired.items())
-			if event.startswith(("before_", "on_", "after_")) and TRAP not in hooks.get(event, []) and event not in NOT_TRAPPED
+			if event.startswith(("before_", "on_", "after_"))
+			and TRAP not in hooks.get(event, [])
+			and event not in NOT_TRAPPED
 		]
 		self.assertEqual(missing, [], "add these to the trap in hooks.py, or to NOT_TRAPPED with a reason")
 
@@ -89,11 +98,23 @@ class TestEveryDocumentEventIsTrapped(GuardTestCase):
 		for event, reason in NOT_TRAPPED.items():
 			self.assertGreater(len(reason), 20, event)
 			self.assertIn(event, fired, f"{event} is no longer fired by Frappe: remove it from NOT_TRAPPED")
-			self.assertNotIn(TRAP, frappe.get_hooks("doc_events")["*"].get(event, []), f"{event} is trapped AND exempt")
+			self.assertNotIn(
+				TRAP, frappe.get_hooks("doc_events")["*"].get(event, []), f"{event} is trapped AND exempt"
+			)
 
 	def test_the_eight_original_events_are_still_trapped(self):
 		hooks = frappe.get_hooks("doc_events")["*"]
-		for event in ("before_insert", "before_validate", "before_save", "on_update", "before_submit", "before_cancel", "on_trash", "before_rename", "after_delete"):
+		for event in (
+			"before_insert",
+			"before_validate",
+			"before_save",
+			"on_update",
+			"before_submit",
+			"before_cancel",
+			"on_trash",
+			"before_rename",
+			"after_delete",
+		):
 			self.assertIn(TRAP, hooks[event], event)
 
 
@@ -102,7 +123,9 @@ class TestNewlyTrappedActions(GuardTestCase):
 		super().setUp()
 		frappe.set_user("Administrator")  # fixtures only (#41)
 		tag = "AST-TEST-CAT-" + uuid.uuid4().hex[:8]
-		self.cat = frappe.get_doc({"doctype": CATEGORY, "loan_category_code": tag, "loan_category_name": tag}).insert()
+		self.cat = frappe.get_doc(
+			{"doctype": CATEGORY, "loan_category_code": tag, "loan_category_name": tag}
+		).insert()
 		self.draft_je = self.journal_entry()
 		self.submitted_je = self.journal_entry()
 		self.submitted_je.submit()
@@ -118,14 +141,20 @@ class TestNewlyTrappedActions(GuardTestCase):
 				"voucher_type": "Journal Entry",
 				"user_remark": "AST-TEST-R18",
 				"accounts": [
-					{"account": "Administrative Expenses - PT", "debit_in_account_currency": 1, "cost_center": "Main - PT"},
+					{
+						"account": "Administrative Expenses - PT",
+						"debit_in_account_currency": 1,
+						"cost_center": "Main - PT",
+					},
 					{"account": "Cash - PT", "credit_in_account_currency": 1, "cost_center": "Main - PT"},
 				],
 			}
 		).insert()
 
 	def je_row(self, name):
-		return frappe.db.sql("select docstatus, modified, user_remark from `tabJournal Entry` where name=%s", name)
+		return frappe.db.sql(
+			"select docstatus, modified, user_remark from `tabJournal Entry` where name=%s", name
+		)
 
 	def test_saving_a_submitted_document_is_trapped(self):
 		before = self.je_row(self.submitted_je.name)
@@ -136,7 +165,9 @@ class TestNewlyTrappedActions(GuardTestCase):
 		self.assertGreaterEqual(ctx.trap_hits, 1)
 		self.assertEqual(ctx.db_writes, 0)  # refused before any UPDATE ran
 		self.assertEqual(self.je_row(self.submitted_je.name), before)
-		self.assertEqual(error_logs(), self.logs + 1)  # the guard's own log still works with on_change trapped
+		self.assertEqual(
+			error_logs(), self.logs + 1
+		)  # the guard's own log still works with on_change trapped
 
 	def test_saving_an_existing_submitted_loan_is_trapped_and_nothing_is_committed(self):
 		name = frappe.get_list("Loan", filters={"docstatus": 1}, pluck="name", limit=1)[0]
@@ -192,7 +223,14 @@ class TestNewlyTrappedActions(GuardTestCase):
 			je = frappe.get_doc("Journal Entry", self.draft_je.name)
 			je.discard()
 		events = [call.args[1] for call in trap.call_args_list]
-		for event in ("before_save", "on_update", "on_change", "before_change", "before_discard", "on_discard"):
+		for event in (
+			"before_save",
+			"on_update",
+			"on_change",
+			"before_change",
+			"before_discard",
+			"on_discard",
+		):
 			self.assertIn(event, events)
 		self.assertEqual(frappe.db.get_value(CATEGORY, self.cat.name, "loan_category_name"), "AST-TEST-DBSET")
 		self.assertEqual(frappe.db.get_value("Journal Entry", self.draft_je.name, "docstatus"), 2)
@@ -219,12 +257,16 @@ class TestExitPath(GuardTestCase):
 		with mock.patch.object(self.db, "rollback", wraps=self.db.rollback) as rollback:
 			with self.assertRaises(guard.AssistantGuardError) as caught:  # not TypeError
 				with guard.read_only_tool_context("AST-TEST-cb-break") as ctx:
-					frappe.db.sql("update `tabLoan Category` set modified=modified where name='AST-TEST-none'")
+					frappe.db.sql(
+						"update `tabLoan Category` set modified=modified where name='AST-TEST-none'"
+					)
 					frappe.db.after_commit._functions = 5
 		self.assertIn("callbacks could not be checked", str(caught.exception))
 		rollback.assert_called_once_with(save_point=ctx.savepoint)  # the rollback ran
 		self.assertFalse(ctx.savepoint_gone)
-		self.assertEqual(ctx.db_writes, 1)  # counted before the rollback (the violation row written after it adds its own)
+		self.assertEqual(
+			ctx.db_writes, 1
+		)  # counted before the rollback (the violation row written after it adds its own)
 		self.assertIs(frappe.db.after_commit._functions, queue)  # the original queue object is back
 		self.assertReset()
 		self.assertEqual(error_logs(), self.logs + 1)
@@ -233,7 +275,9 @@ class TestExitPath(GuardTestCase):
 		with mock.patch.object(guard, "_restore_callbacks", side_effect=RuntimeError("boom")):
 			with self.assertRaises(guard.AssistantGuardError):
 				with guard.read_only_tool_context("AST-TEST-cb-raise") as ctx:
-					frappe.db.sql("update `tabLoan Category` set modified=modified where name='AST-TEST-none'")
+					frappe.db.sql(
+						"update `tabLoan Category` set modified=modified where name='AST-TEST-none'"
+					)
 		self.assertEqual(ctx.identity_changes, ["callbacks could not be restored"])
 		self.assertEqual(ctx.db_writes, 1)
 		self.assertFalse(ctx.savepoint_gone)

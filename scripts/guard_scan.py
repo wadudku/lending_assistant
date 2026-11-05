@@ -75,7 +75,10 @@ ALLOWED = {
 	"user-switch": (GUARD,),  # the run-time identity layer restores user, session and connection (M2b-R8)
 	"flags": (GUARD,),  # frappe.flags: only the two helpers in guard.py
 	"secrets": ("install.py", "assistant/settings.py"),  # frappe.conf, get_site_config, get_password
-	"file-access": ("assistant/codereader.py", *KB_FILES),  # the three kb files are also scoped by function, see SCOPES
+	"file-access": (
+		"assistant/codereader.py",
+		*KB_FILES,
+	),  # the three kb files are also scoped by function, see SCOPES
 	"db-other": (),  # any frappe.db.<attr> that is not read, write or one of the transaction lines
 	"qb": (),
 	"client-api": (),  # frappe.client.* / frappe.desk.*: whole documents, no never-send or Password filter (G3)
@@ -103,13 +106,21 @@ SCOPES = {
 		"alias": IDENTITY_FUNCS,
 		"txn-control": (*IDENTITY_FUNCS, "read_only_tool_context"),
 		"callbacks": ("_snapshot_callbacks", "_restore_callbacks"),
-		"flags": ("_ast_flag", "_set_ast_flag", "_capture_identity", "_restore_identity", "_restore_flag_values"),
+		"flags": (
+			"_ast_flag",
+			"_set_ast_flag",
+			"_capture_identity",
+			"_restore_identity",
+			"_restore_flag_values",
+		),
 	},
 	# M3b: a marker for file access is accepted only inside these helpers, each with one open() call. A marker for
 	# get_meta (rule not-allowed) is accepted only inside validate._meta_of. lookup, search, retrieve and
 	# assistant/tools/knowledge.py have no allowance at all (see KB_FILES / ALLOWED).
 	"kb/store.py": {"file-access": ("_read_text",)},
-	"kb/ingest.py": {"file-access": ("_read_bytes", "_write_bytes", "_list_dir", "_make_dirs", "_remove_file")},
+	"kb/ingest.py": {
+		"file-access": ("_read_bytes", "_write_bytes", "_list_dir", "_make_dirs", "_remove_file")
+	},
 	"kb/validate.py": {"file-access": ("_read_text",), "not-allowed": ("_meta_of",)},
 	# M4a: the get_meta marker in access.py is accepted only in the two functions that read permissions / field info.
 	"assistant/access.py": {"not-allowed": ("describe_doctype", "roles_that_can")},
@@ -142,7 +153,12 @@ ALLOWLIST = [
 	("frappe.model.document.Document", ("**/doctype/",), "base", False),
 	("frappe.whitelist", ("api/",), "call", False),
 	("frappe.cache.*", ("assistant/ratelimit.py",), "call", False),
-	("frappe.logger", ("assistant/tools/registry.py",), "call", False),  # M4a: the file log of refusals (no database)
+	(
+		"frappe.logger",
+		("assistant/tools/registry.py",),
+		"call",
+		False,
+	),  # M4a: the file log of refusals (no database)
 	("frappe.local.request_ip", ("api/chat.py",), "read", False),
 	# marked lines only. get_meta returns a live Meta (a Document): tool code gets meta facts from guard/access helpers
 	("frappe.get_meta", (GUARD, "assistant/access.py", "install.py", "kb/validate.py"), "call", True),
@@ -189,19 +205,43 @@ _PLAIN_IMPORTS = {
 }
 _FROM_IMPORTS = {
 	GUARD: (
-		("collections", "Counter"), ("contextlib", "contextmanager"), ("datetime", "date"), ("datetime", "datetime"),
-		("datetime", "time"), ("datetime", "timedelta"), ("decimal", "Decimal"),
+		("collections", "Counter"),
+		("contextlib", "contextmanager"),
+		("datetime", "date"),
+		("datetime", "datetime"),
+		("datetime", "time"),
+		("datetime", "timedelta"),
+		("decimal", "Decimal"),
 	),
 	"assistant/tools/registry.py": (("typing", "NamedTuple"),),
 }
-IMPORT_ALLOWLIST += [("import", module, None, (rel,)) for rel, modules in _PLAIN_IMPORTS.items() for module in modules]
-IMPORT_ALLOWLIST += [("from", module, name, (rel,)) for rel, pairs in _FROM_IMPORTS.items() for module, name in pairs]
+IMPORT_ALLOWLIST += [
+	("import", module, None, (rel,)) for rel, modules in _PLAIN_IMPORTS.items() for module in modules
+]
+IMPORT_ALLOWLIST += [
+	("from", module, name, (rel,)) for rel, pairs in _FROM_IMPORTS.items() for module, name in pairs
+]
 # Modules that open a network connection or talk to a database. A hit in every file: no row can allow them and no
 # marker excuses them (M4a, #45). `anthropic` is not here: it is allowed in the orchestrator only, by a row in M4b.
 NETWORK_MODULES = (
-	"socket", "requests", "urllib", "http", "sqlite3", "pymysql", "MySQLdb", "httpx",
-	"ssl", "smtplib", "ftplib", "telnetlib", "socketserver", "xmlrpc", "aiohttp", "websockets", "mysql",
-)  # fmt: skip
+	"socket",
+	"requests",
+	"urllib",
+	"http",
+	"sqlite3",
+	"pymysql",
+	"MySQLdb",
+	"httpx",
+	"ssl",
+	"smtplib",
+	"ftplib",
+	"telnetlib",
+	"socketserver",
+	"xmlrpc",
+	"aiohttp",
+	"websockets",
+	"mysql",
+)
 
 
 # --- (H) the app's own modules ---------------------------------------------------------------------------------------
@@ -210,7 +250,12 @@ NETWORK_MODULES = (
 ASSISTANT = PACKAGE + ".assistant"
 APP_API = {
 	f"{ASSISTANT}.guard": {
-		"read_doc", "list_records", "as_data", "read_only_tool_context", "RecordNotAvailable", "AssistantGuardError",
+		"read_doc",
+		"list_records",
+		"as_data",
+		"read_only_tool_context",
+		"RecordNotAvailable",
+		"AssistantGuardError",
 	},
 	f"{ASSISTANT}.access": {"check_my_access", "roles_that_can"},
 	f"{ASSISTANT}.codereader": {"read", "search"},
@@ -226,11 +271,18 @@ APP_API = {
 	# M3b knowledge base: pure functions over the ingested files. Only names that some module imports are listed.
 	f"{PACKAGE}.kb.store": {"CARD_ID", "TYPES", "parse_front_matter", "reset_cache", "load", "get_card"},
 	f"{PACKAGE}.kb.lookup": {
-		"norm_term", "vocabulary", "normalise_br_id", "normalise_journey", "normalise_dev_item", "normalise_doctype",
-		"score_keys", "rank", "lookup",
+		"norm_term",
+		"vocabulary",
+		"normalise_br_id",
+		"normalise_journey",
+		"normalise_dev_item",
+		"normalise_doctype",
+		"score_keys",
+		"rank",
+		"lookup",
 	},
 	f"{PACKAGE}.kb.search": {"bm25_scores", "search"},
-}  # fmt: skip
+}
 # (module, name, files, reserved): extra names for particular files. `reserved` grants are for code that does not exist
 # yet (M4); they are exempt from the dead-entry check and a test shows they work only in their file.
 APP_GRANTS = [
@@ -263,12 +315,22 @@ APP_GRANTS = [
 		(f"{ASSISTANT}.tools.{module}", name, ("assistant/tools/registry.py",), False)
 		for module, names in {
 			"knowledge": (
-				"lookup_knowledge", "get_card", "search_knowledge",
-				"LOOKUP_KNOWLEDGE_SCHEMA", "GET_CARD_SCHEMA", "SEARCH_KNOWLEDGE_SCHEMA",
+				"lookup_knowledge",
+				"get_card",
+				"search_knowledge",
+				"LOOKUP_KNOWLEDGE_SCHEMA",
+				"GET_CARD_SCHEMA",
+				"SEARCH_KNOWLEDGE_SCHEMA",
 			),
 			"live": (
-				"get_screen_help", "check_my_access", "find_records", "get_record",
-				"GET_SCREEN_HELP_SCHEMA", "CHECK_MY_ACCESS_SCHEMA", "FIND_RECORDS_SCHEMA", "GET_RECORD_SCHEMA",
+				"get_screen_help",
+				"check_my_access",
+				"find_records",
+				"get_record",
+				"GET_SCREEN_HELP_SCHEMA",
+				"CHECK_MY_ACCESS_SCHEMA",
+				"FIND_RECORDS_SCHEMA",
+				"GET_RECORD_SCHEMA",
 			),
 			"code": ("search_code", "read_code", "SEARCH_CODE_SCHEMA", "READ_CODE_SCHEMA"),
 		}.items()
@@ -291,7 +353,7 @@ APP_GRANTS = [
 	(f"{ASSISTANT}.ratelimit", "FEEDBACK_PREFIX", ("api/chat.py",), False),
 	(f"{PACKAGE}.install", "seed_defaults", ("patches/",), False),
 	(f"{PACKAGE}.install", "raise_max_tokens_default", ("patches/",), False),
-]  # fmt: skip
+]
 # A doctype controller: `...doctype.<x>.<x>` (a class that loads rows without any permission check).
 CONTROLLER = re.compile(r"(?:^|\.)doctype\.(\w+)\.\1(?:\.|$)")
 
@@ -329,9 +391,13 @@ class Entry(NamedTuple):
 
 ENTRIES = [Entry(*row) for row in ALLOWLIST]
 MODES = {
-	"read": {"load"}, "call": {"call"}, "use": {"load", "call", "base"}, "base": {"base"}, "store": {"store"},
+	"read": {"load"},
+	"call": {"call"},
+	"use": {"load", "call", "base"},
+	"base": {"base"},
+	"store": {"store"},
 	"any": {"load", "call", "base", "store"},
-}  # fmt: skip
+}
 
 
 def import_key(entry) -> str:
@@ -363,42 +429,122 @@ def chain_matches(pattern: str, full: str) -> bool:
 
 # --- the old denylist: names for hits, and the markers that already excuse today's lines -------------------------------
 DB_READS = {
-	"get_value", "get_values", "get_single_value", "sql", "sql_list", "sql_ddl", "count", "exists",
-	"get_all", "get_list", "multisql", "escape",
-}  # fmt: skip
+	"get_value",
+	"get_values",
+	"get_single_value",
+	"sql",
+	"sql_list",
+	"sql_ddl",
+	"count",
+	"exists",
+	"get_all",
+	"get_list",
+	"multisql",
+	"escape",
+}
 GET_DOCS = {"get_doc", "get_cached_doc", "get_last_doc", "get_single", "new_doc", "get_cached_value"}
 WRITES = {
-	"insert", "save", "submit", "cancel", "delete", "delete_doc", "rename_doc", "set_value", "db_insert",
-	"db_update", "db_set", "truncate", "bulk_insert", "set_single_value", "update", "run_method",
-}  # fmt: skip
+	"insert",
+	"save",
+	"submit",
+	"cancel",
+	"delete",
+	"delete_doc",
+	"rename_doc",
+	"set_value",
+	"db_insert",
+	"db_update",
+	"db_set",
+	"truncate",
+	"bulk_insert",
+	"set_single_value",
+	"update",
+	"run_method",
+}
 # The ONLY frappe.db attributes tool code may touch, and only on lines the guard marks (DECISIONS #35, #41, #43).
 DB_TXN_ALLOWED = {
-	"savepoint", "rollback", "release_savepoint", "_disable_transaction_control", "transaction_writes", "_conn",
-	"_cursor", "close",
-}  # fmt: skip
+	"savepoint",
+	"rollback",
+	"release_savepoint",
+	"_disable_transaction_control",
+	"transaction_writes",
+	"_conn",
+	"_cursor",
+	"close",
+}
 DB_CALLBACKS = {"before_commit", "after_commit", "before_rollback", "after_rollback"}
 TXN_ATTRS = {"_disable_transaction_control", "transaction_writes", "_conn", "_cursor"}
-FILE_CALLS = {"open", "read_text", "read_bytes", "write_text", "write_bytes", "walk", "listdir", "scandir", "glob", "rglob", "iterdir", "copyfile", "rmtree"}  # fmt: skip
+FILE_CALLS = {
+	"open",
+	"read_text",
+	"read_bytes",
+	"write_text",
+	"write_bytes",
+	"walk",
+	"listdir",
+	"scandir",
+	"glob",
+	"rglob",
+	"iterdir",
+	"copyfile",
+	"rmtree",
+}
 # M3b-R2: calls that change files. The first group is matched on any receiver; the second group has names that other
 # types also use (str.replace, list.remove, dict.copy), so it is matched only on an `os` / `shutil` / `pathlib`
 # receiver (a module, or `Path(...)`), or, for `replace`, a one-argument call (str.replace takes two).
-FILE_MUTATORS = {"unlink", "rename", "makedirs", "mkdir", "rmdir", "removedirs", "copy2", "copytree", "chmod", "symlink", "truncate"}  # fmt: skip
+FILE_MUTATORS = {
+	"unlink",
+	"rename",
+	"makedirs",
+	"mkdir",
+	"rmdir",
+	"removedirs",
+	"copy2",
+	"copytree",
+	"chmod",
+	"symlink",
+	"truncate",
+}
 FILE_MUTATORS_AMBIGUOUS = {"remove", "replace", "copy", "move", "link"}
 FILE_MODULES = ("os", "shutil", "pathlib")
 EXEC_NAMES = {"eval", "exec", "compile", "__import__"}
 DYNAMIC_NAMES = {"getattr", "setattr", "delattr", "globals", "vars"}
 EXEC_DOTTED = {
-	"os.system", "os.popen", "frappe.call", "frappe.get_attr", "frappe.get_method", "operator.attrgetter",
-	"operator.methodcaller", "sys.modules", "sys._getframe", "sys._current_frames", "sys.exc_info",
-}  # fmt: skip
+	"os.system",
+	"os.popen",
+	"frappe.call",
+	"frappe.get_attr",
+	"frappe.get_method",
+	"operator.attrgetter",
+	"operator.methodcaller",
+	"sys.modules",
+	"sys._getframe",
+	"sys._current_frames",
+	"sys.exc_info",
+}
 DYNAMIC_DOTTED = {"operator.attrgetter", "operator.methodcaller", "sys.modules"}
 EXEC_PREFIXES = (
-	"subprocess", "importlib", "runpy", "pkgutil", "ctypes", "builtins", "frappe.utils.safe_exec",
-	"gc", "inspect", "imp", "code", "codeop", "pdb",
-)  # fmt: skip
+	"subprocess",
+	"importlib",
+	"runpy",
+	"pkgutil",
+	"ctypes",
+	"builtins",
+	"frappe.utils.safe_exec",
+	"gc",
+	"inspect",
+	"imp",
+	"code",
+	"codeop",
+	"pdb",
+)
 SIDE_EFFECT_DOTTED = {
-	"frappe.sendmail", "frappe.enqueue", "frappe.enqueue_doc", "frappe.publish_realtime", "frappe.publish_progress",
-}  # fmt: skip
+	"frappe.sendmail",
+	"frappe.enqueue",
+	"frappe.enqueue_doc",
+	"frappe.publish_realtime",
+	"frappe.publish_progress",
+}
 SIDE_EFFECT_PREFIXES = ("frappe.utils.background_jobs", "frappe.email.queue")
 CLIENT_API_PREFIXES = ("frappe.client", "frappe.desk", "frappe.model.db_query")
 SECRET_PREFIXES = ("frappe.conf", "os.environ", "os.getenv", "os.putenv")
@@ -410,36 +556,91 @@ TRACK_ALIAS = BARE_ALIAS | {"frappe.flags", "frappe.local.session", "frappe.loca
 LOCAL_PROXIED = {"db", "qb", "flags", "session", "conf"}
 # Writing to any of these changes who the session is (G2) or switches permission checks off.
 PROTECTED = (
-	"frappe.session", "frappe.local.session", "frappe.local.user",
-	"frappe.flags.ignore_permissions", "frappe.local.flags.ignore_permissions",
-)  # fmt: skip
+	"frappe.session",
+	"frappe.local.session",
+	"frappe.local.user",
+	"frappe.flags.ignore_permissions",
+	"frappe.local.flags.ignore_permissions",
+)
 MUTATORS = {"update", "setdefault", "pop", "popitem", "clear", "__setitem__", "__delitem__"}
 
 # (D) method names that are banned whatever the receiver is (an alias cannot hide them): name -> rule.
 METHOD_RULES = {
-	**dict.fromkeys(["sql", "sql_ddl", "multisql", "get_value", "get_values", "get_all", "sql_list", "get_single_value"], "db-read"),
-	**dict.fromkeys(["get_doc", "get_cached_doc", "new_doc", "get_last_doc", "get_cached_value", "get_single"], "get-doc"),
-	**dict.fromkeys(["delete_doc", "rename_doc", "set_value", "db_set", "insert", "save", "submit", "cancel", "delete", "db_insert", "db_update", "truncate", "bulk_insert", "set_single_value"], "write"),  # fmt: skip
+	**dict.fromkeys(
+		["sql", "sql_ddl", "multisql", "get_value", "get_values", "get_all", "sql_list", "get_single_value"],
+		"db-read",
+	),
+	**dict.fromkeys(
+		["get_doc", "get_cached_doc", "new_doc", "get_last_doc", "get_cached_value", "get_single"], "get-doc"
+	),
+	**dict.fromkeys(
+		[
+			"delete_doc",
+			"rename_doc",
+			"set_value",
+			"db_set",
+			"insert",
+			"save",
+			"submit",
+			"cancel",
+			"delete",
+			"db_insert",
+			"db_update",
+			"truncate",
+			"bulk_insert",
+			"set_single_value",
+		],
+		"write",
+	),
 	**dict.fromkeys(["commit", "rollback"], "txn-control"),
 	**dict.fromkeys(["connect", "init", "login_as", "set_user"], "user-switch"),
-	**dict.fromkeys(["enqueue", "enqueue_doc", "queue_action", "sendmail", "publish_realtime", "publish_progress"], "side-effect"),
+	**dict.fromkeys(
+		["enqueue", "enqueue_doc", "queue_action", "sendmail", "publish_realtime", "publish_progress"],
+		"side-effect",
+	),
 	**dict.fromkeys(["get_site_config", "get_password"], "secrets"),
 	"get_list": "get-list",
 	"run": "qb",  # only when the receiver chain has qb / query in it
-}  # fmt: skip
+}
 QB_WORDS = {"qb", "query", "query_builder", "Engine", "get_query", "from_"}
 
 # (E) dunders: a way to reach builtins or the module dict without naming them.
 DUNDERS = {
-	"__builtins__", "__dict__", "__class__", "__globals__", "__subclasses__", "__mro__", "__getattribute__",
-	"__import__", "__getattr__", "__setattr__", "__delattr__", "__bases__", "__base__", "__code__", "__closure__",
-	"__func__", "__self__", "__reduce__", "__reduce_ex__", "mro",  # `type(x).mro()[1]` reaches the Document class (R12)
+	"__builtins__",
+	"__dict__",
+	"__class__",
+	"__globals__",
+	"__subclasses__",
+	"__mro__",
+	"__getattribute__",
+	"__import__",
+	"__getattr__",
+	"__setattr__",
+	"__delattr__",
+	"__bases__",
+	"__base__",
+	"__code__",
+	"__closure__",
+	"__func__",
+	"__self__",
+	"__reduce__",
+	"__reduce_ex__",
+	"mro",  # `type(x).mro()[1]` reaches the Document class (R12)
 	# stack frames and tracebacks hand out another module's globals (`frame.f_globals['frappe']`)
-	"f_globals", "f_locals", "f_back", "f_builtins", "gi_frame", "cr_frame", "ag_frame", "tb_frame",
-}  # fmt: skip
+	"f_globals",
+	"f_locals",
+	"f_back",
+	"f_builtins",
+	"gi_frame",
+	"cr_frame",
+	"ag_frame",
+	"tb_frame",
+}
 DUNDER_NAMES = {"__builtins__", "__import__"}
 
-JS_HTML = re.compile(r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write|\.html\(|\$\(\s*[`'\"]\s*<")
+JS_HTML = re.compile(
+	r"\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write|\.html\(|\$\(\s*[`'\"]\s*<"
+)
 WHITELIST_OK = {("api/chat.py", "ask"), ("api/chat.py", "feedback"), ("api/findings.py", "save")}
 
 
@@ -489,7 +690,10 @@ def classify(full: str, call: bool):
 			return ("get-list" if attr == "get_list" else "db-read"), shown
 		if attr in WRITES:
 			return "write", shown
-		return "db-other", f"{shown}: frappe.db.{attr} is not on the allowlist (DDL, defaults, commit and the rest)"
+		return (
+			"db-other",
+			f"{shown}: frappe.db.{attr} is not on the allowlist (DDL, defaults, commit and the rest)",
+		)
 	if full in ("frappe.get_value", "frappe.get_single_value", "frappe.get_all"):
 		return "db-read", shown
 	if full == "frappe.get_list":
@@ -538,7 +742,9 @@ class Scanner(ast.NodeVisitor):
 	def hit_found(self, node, found, call: bool):
 		self.hit(node, *found)
 		if call and found[0] == "user-switch":
-			self.hit(node, "identity-call", f"{found[1]}: an identity or connection switch; no marker is accepted")
+			self.hit(
+				node, "identity-call", f"{found[1]}: an identity or connection switch; no marker is accepted"
+			)
 
 	# --- helpers
 
@@ -561,7 +767,11 @@ class Scanner(ast.NodeVisitor):
 			return "store"
 		if isinstance(parent, ast.Call) and parent.func is node:
 			return "call"
-		if isinstance(parent, ast.Subscript) and parent.value is node and isinstance(parent.ctx, ast.Store | ast.Del):
+		if (
+			isinstance(parent, ast.Subscript)
+			and parent.value is node
+			and isinstance(parent.ctx, ast.Store | ast.Del)
+		):
 			return "store"
 		if isinstance(parent, ast.ClassDef) and node in parent.bases:
 			return "base"
@@ -591,7 +801,11 @@ class Scanner(ast.NodeVisitor):
 			self.check_binding(node, item.asname)
 		if name == "frappe" or name.startswith("frappe."):
 			if item.asname:
-				self.hit(node, "alias", f"import {name} as {item.asname}: the frappe module may not be bound to another name (A)")
+				self.hit(
+					node,
+					"alias",
+					f"import {name} as {item.asname}: the frappe module may not be bound to another name (A)",
+				)
 			found = classify(name, False)
 			if found:
 				self.hit(node, found[0], f"import of {name}: {found[1]}")
@@ -610,10 +824,18 @@ class Scanner(ast.NodeVisitor):
 		if any(under(module, p) for p in EXEC_PREFIXES):
 			self.hit(node, "generic-exec", f"import of {module}")
 		elif module.split(".")[0] in NETWORK_MODULES:
-			self.hit(node, "network-import", f"import {module}: network and database-driver modules are banned everywhere (C)")
+			self.hit(
+				node,
+				"network-import",
+				f"import {module}: network and database-driver modules are banned everywhere (C)",
+			)
 		elif not self.import_allowed("import", module, f"as {asname}" if asname else None):
 			alias = f" as {asname}" if asname else ""
-			self.hit(node, "alias" if asname else "import", f"import {module}{alias} is not on the import allowlist for {self.rel} (C)")
+			self.hit(
+				node,
+				"alias" if asname else "import",
+				f"import {module}{alias} is not on the import allowlist for {self.rel} (C)",
+			)
 
 	def judge_foreign_from(self, node, module: str, name: str, asname=None):
 		"""(C, M4a) `from x import y` for a module that is not frappe and not the app: judged by name, so
@@ -622,9 +844,19 @@ class Scanner(ast.NodeVisitor):
 		if any(under(full, p) for p in EXEC_PREFIXES) or full in EXEC_DOTTED or full in DYNAMIC_DOTTED:
 			self.hit(node, "generic-exec" if full not in DYNAMIC_DOTTED else "dynamic", f"import of {full}")
 		elif module.split(".")[0] in NETWORK_MODULES:
-			self.hit(node, "network-import", f"from {module} import {name}: network and database-driver modules are banned everywhere (C)")
-		elif not self.import_allowed("from", module, f"{name} as {asname}" if asname and asname != name else name):
-			self.hit(node, "alias" if asname and asname != name else "import", f"from {module} import {name} is not on the import allowlist for {self.rel} (C)")
+			self.hit(
+				node,
+				"network-import",
+				f"from {module} import {name}: network and database-driver modules are banned everywhere (C)",
+			)
+		elif not self.import_allowed(
+			"from", module, f"{name} as {asname}" if asname and asname != name else name
+		):
+			self.hit(
+				node,
+				"alias" if asname and asname != name else "import",
+				f"from {module} import {name} is not on the import allowlist for {self.rel} (C)",
+			)
 
 	def judge_from_import(self, node):
 		module = self.absolute_module(node)
@@ -636,7 +868,11 @@ class Scanner(ast.NodeVisitor):
 		is_frappe = module == "frappe" or module.startswith("frappe.")
 		for item in node.names:
 			if item.name == "*":
-				self.hit(node, "app-api" if is_app_module else "alias" if is_frappe else "import", f"star import from {module}")
+				self.hit(
+					node,
+					"app-api" if is_app_module else "alias" if is_frappe else "import",
+					f"star import from {module}",
+				)
 				continue
 			full = f"{module}.{item.name}"
 			self.aliases[item.asname or item.name] = full
@@ -649,9 +885,15 @@ class Scanner(ast.NodeVisitor):
 				if found:
 					self.hit(node, found[0], f"import of {full}: {found[1]}")
 				if item.asname and item.asname != item.name:
-					self.hit(node, "alias", f"from {module} import {item.name} as {item.asname}: no other names for frappe things (A)")
+					self.hit(
+						node,
+						"alias",
+						f"from {module} import {item.name} as {item.asname}: no other names for frappe things (A)",
+					)
 				if not self.import_allowed("from", module, item.name):
-					self.hit(node, "import", f"from {module} import {item.name} is not on the import allowlist (C)")
+					self.hit(
+						node, "import", f"from {module} import {item.name} is not on the import allowlist (C)"
+					)
 			else:
 				self.judge_foreign_from(node, module, item.name, item.asname)
 
@@ -673,7 +915,11 @@ class Scanner(ast.NodeVisitor):
 
 	def judge_controller(self, node, full: str):
 		if CONTROLLER.search(full) and not file_ok(self.rel, ("**/doctype/",)):
-			self.hit(node, "controller-import", f"{full}: a doctype controller loads rows with no permission check (I)")
+			self.hit(
+				node,
+				"controller-import",
+				f"{full}: a doctype controller loads rows with no permission check (I)",
+			)
 
 	def judge_app_import(self, node, full: str):
 		"""`import a.b` / `from a import b`: a module may be imported; an unknown module, or a private or unlisted
@@ -697,7 +943,11 @@ class Scanner(ast.NodeVisitor):
 			if grant[0] == module and grant[1] == name and file_ok(self.rel, grant[2]):
 				self.used_entries.add(grant_key(grant))
 				return
-		self.hit(node, "app-api", f"{module}.{name} is not a public name of {module.rsplit('.', 1)[1]} for {self.rel} (H)")
+		self.hit(
+			node,
+			"app-api",
+			f"{module}.{name} is not a public name of {module.rsplit('.', 1)[1]} for {self.rel} (H)",
+		)
 
 	def judge_app(self, node, full: str, use: str):
 		module, rest = app_target(full)
@@ -706,7 +956,11 @@ class Scanner(ast.NodeVisitor):
 		elif module == self.own_module():
 			return
 		elif not rest:
-			self.hit(node, "app-api", f"{module} used as a value: it may only be the root of an attribute chain (H)")
+			self.hit(
+				node,
+				"app-api",
+				f"{module} used as a value: it may only be the root of an attribute chain (H)",
+			)
 		else:
 			self.app_name_check(node, module, rest)
 
@@ -730,7 +984,9 @@ class Scanner(ast.NodeVisitor):
 
 	def judge_allowlist(self, node, full: str, use: str):
 		matches = [
-			e for e in ENTRIES if chain_matches(e.chain, full) and use in MODES[e.mode] and file_ok(self.rel, e.files)
+			e
+			for e in ENTRIES
+			if chain_matches(e.chain, full) and use in MODES[e.mode] and file_ok(self.rel, e.files)
 		]
 		if not matches:
 			self.hit(node, "not-allowed", f"{full} ({use}) is not on the allowlist for {self.rel} (B)")
@@ -740,14 +996,23 @@ class Scanner(ast.NodeVisitor):
 			self.used_entries.add(plain[0].key)
 			return
 		self.used_entries.add(matches[0].key)
-		self.hit(node, "not-allowed", f"{full}: allowed here only on a line marked '# AST-ALLOWED: <reason>'", matches[0].files)
+		self.hit(
+			node,
+			"not-allowed",
+			f"{full}: allowed here only on a line marked '# AST-ALLOWED: <reason>'",
+			matches[0].files,
+		)
 
 	def judge_flags(self, node, use: str):
 		"""(G) frappe.flags may only be touched by guard.py's marked helpers: no write, mutator or computed key."""
 		parent = self.parent.get(id(node))
 		if use == "store":
 			self.hit(node, "flags", "write to frappe.flags")
-		elif isinstance(parent, ast.Subscript) and parent.value is node and not isinstance(parent.slice, ast.Constant):
+		elif (
+			isinstance(parent, ast.Subscript)
+			and parent.value is node
+			and not isinstance(parent.slice, ast.Constant)
+		):
 			self.hit(node, "flags", "computed key on frappe.flags")
 		elif use == "call" and dotted(node).split(".")[-1] in MUTATORS:
 			self.hit(node, "flags", f"{dotted(node)}() changes frappe.flags")
@@ -850,7 +1115,11 @@ class Scanner(ast.NodeVisitor):
 		elif node.attr == "_functions":
 			self.hit(node, "callbacks", f"{name}: private callback queue")
 		elif node.attr == "whitelist" and id(node) not in self.skip:
-			self.hit(node, "whitelist", "@frappe.whitelist outside api/chat.py (ask, feedback) and api/findings.py (save)")
+			self.hit(
+				node,
+				"whitelist",
+				"@frappe.whitelist outside api/chat.py (ask, feedback) and api/findings.py (save)",
+			)
 		if node.attr in DUNDERS:
 			self.hit(node, "dynamic", f"{name}: dunder access (E)")
 		if node.attr == "frappe":
@@ -868,7 +1137,11 @@ class Scanner(ast.NodeVisitor):
 			if isinstance(node.ctx, ast.Store | ast.Del):
 				self.hit(node, "alias", "the name `frappe` is rebound (A)")
 			elif not self.is_chain_base(node):
-				self.hit(node, "alias", "`frappe` used as a value: it may only be the root of an attribute chain (A)")
+				self.hit(
+					node,
+					"alias",
+					"`frappe` used as a value: it may only be the root of an attribute chain (A)",
+				)
 		elif node.id in self.aliases and isinstance(node.ctx, ast.Load) and not self.is_chain_base(node):
 			self.judge_chain(node)
 
@@ -910,15 +1183,21 @@ class Scanner(ast.NodeVisitor):
 		func = node.func
 		if isinstance(func, ast.Attribute):
 			self.judge_method(node, func)
-		elif isinstance(func, ast.Name) and func.id not in self.aliases:  # a builtin, not an imported or assigned name
+		elif (
+			isinstance(func, ast.Name) and func.id not in self.aliases
+		):  # a builtin, not an imported or assigned name
 			if func.id in EXEC_NAMES:
 				self.hit(node, "generic-exec", f"{func.id}()")
 			elif func.id in DYNAMIC_NAMES:
-				self.hit(node, "dynamic", f"{func.id}(): dynamic attribute access hides what is being touched")
+				self.hit(
+					node, "dynamic", f"{func.id}(): dynamic attribute access hides what is being touched"
+				)
 			elif func.id == "open":
 				self.hit(node, "file-access", "open()")
 			elif func.id == "type" and len(node.args) == 1 and not node.keywords:
-				self.hit(node, "dynamic", "type(x): hands out the class of any object, Document included (R12)")
+				self.hit(
+					node, "dynamic", "type(x): hands out the class of any object, Document included (R12)"
+				)
 		elif isinstance(func, ast.Name):
 			self.judge_imported_file_call(node, func)
 		self.generic_visit(node)
@@ -928,8 +1207,10 @@ class Scanner(ast.NodeVisitor):
 		allows it; this catches the call if a row is ever added for a file-changing name."""
 		resolved = self.resolve(func)
 		parts = resolved.split(".")
-		if len(parts) > 1 and parts[0] in FILE_MODULES and parts[-1] in (
-			FILE_CALLS | FILE_MUTATORS | FILE_MUTATORS_AMBIGUOUS
+		if (
+			len(parts) > 1
+			and parts[0] in FILE_MODULES
+			and parts[-1] in (FILE_CALLS | FILE_MUTATORS | FILE_MUTATORS_AMBIGUOUS)
 		):
 			self.hit(node, "file-access", f"{resolved}() called through an imported name")
 
@@ -939,7 +1220,8 @@ class Scanner(ast.NodeVisitor):
 		name = self.resolve(func)
 		rule = METHOD_RULES.get(method)
 		if method == "run" and not any(
-			(isinstance(n, ast.Attribute) and n.attr in QB_WORDS) or (isinstance(n, ast.Name) and n.id in QB_WORDS)
+			(isinstance(n, ast.Attribute) and n.attr in QB_WORDS)
+			or (isinstance(n, ast.Name) and n.id in QB_WORDS)
 			for n in ast.walk(func.value)
 		):
 			rule = None
@@ -964,7 +1246,12 @@ class Scanner(ast.NodeVisitor):
 		if isinstance(receiver, ast.Call):
 			receiver = receiver.func  # Path(p).replace(...): judge Path
 		base = self.resolve(receiver)
-		if base.split(".")[0] in FILE_MODULES or base.split(".")[-1] in ("Path", "PurePath", "PosixPath", "WindowsPath"):
+		if base.split(".")[0] in FILE_MODULES or base.split(".")[-1] in (
+			"Path",
+			"PurePath",
+			"PosixPath",
+			"WindowsPath",
+		):
 			return True
 		return func.attr == "replace" and len(node.args) == 1 and not node.keywords
 
@@ -991,14 +1278,24 @@ def check_markers(rel: str, lines: list[str], hits, used_lines: set[int], functi
 		text = lines[hit.line - 1] if 0 < hit.line <= len(lines) else ""
 		marker = MARKER.search(text)
 		if not marker:
-			problems.append((hit.line, hit.rule, f"{hit.message}: banned here without '# AST-ALLOWED: <reason>'"))
+			problems.append(
+				(hit.line, hit.rule, f"{hit.message}: banned here without '# AST-ALLOWED: <reason>'")
+			)
 		elif not marker.group(1).strip():
 			problems.append((hit.line, hit.rule, f"{hit.message}: AST-ALLOWED needs a reason"))
 		elif not allowed_here(rel, hit.rule, hit.files):
-			problems.append((hit.line, hit.rule, f"{hit.message}: AST-ALLOWED is not permitted in {rel} for '{hit.rule}'"))
+			problems.append(
+				(hit.line, hit.rule, f"{hit.message}: AST-ALLOWED is not permitted in {rel} for '{hit.rule}'")
+			)
 		elif not in_scope(rel, hit.rule, hit.line, functions):
 			where = ", ".join(SCOPES[rel][hit.rule])
-			problems.append((hit.line, hit.rule, f"{hit.message}: AST-ALLOWED for '{hit.rule}' is accepted only inside {where} (R17)"))
+			problems.append(
+				(
+					hit.line,
+					hit.rule,
+					f"{hit.message}: AST-ALLOWED for '{hit.rule}' is accepted only inside {where} (R17)",
+				)
+			)
 		else:
 			used_lines.add(hit.line)
 	return problems
@@ -1035,7 +1332,9 @@ def scan_python(rel: str, source: str, used: set[str], strict: bool = False):
 	]
 	problems = check_markers(rel, lines, scanner.hits, used_lines, functions)
 	extra = check_marker_lines(lines, used_lines, strict)
-	return problems + [p for p in extra if not any(q[0] == p[0] and "needs a reason" in q[2] for q in problems)]
+	return problems + [
+		p for p in extra if not any(q[0] == p[0] and "needs a reason" in q[2] for q in problems)
+	]
 
 
 def scan_js(rel: str, source: str, strict: bool = False):
@@ -1044,7 +1343,9 @@ def scan_js(rel: str, source: str, strict: bool = False):
 	used_lines: set[int] = set()
 	problems = check_markers(rel, lines, hits, used_lines)
 	extra = check_marker_lines(lines, used_lines, strict)
-	return problems + [p for p in extra if not any(q[0] == p[0] and "needs a reason" in q[2] for q in problems)]
+	return problems + [
+		p for p in extra if not any(q[0] == p[0] and "needs a reason" in q[2] for q in problems)
+	]
 
 
 class Result(NamedTuple):
@@ -1083,7 +1384,11 @@ def scan(root: Path, strict: bool = False) -> Result:
 def main(argv=None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
 	parser.add_argument("--root", default=str(Path(__file__).resolve().parent.parent))
-	parser.add_argument("--check-allowlist", action="store_true", help="also fail on dead allowlist entries and unused markers")
+	parser.add_argument(
+		"--check-allowlist",
+		action="store_true",
+		help="also fail on dead allowlist entries and unused markers",
+	)
 	args = parser.parse_args(argv)
 	root = Path(args.root)
 	if not (root / PACKAGE).is_dir():
@@ -1092,10 +1397,14 @@ def main(argv=None) -> int:
 	result = scan(root, strict=args.check_allowlist)
 	problems = list(result.problems)
 	if args.check_allowlist:
-		problems += [f"allowlist: dead entry, used nowhere in the app: {key}" for key in result.unused_entries]
+		problems += [
+			f"allowlist: dead entry, used nowhere in the app: {key}" for key in result.unused_entries
+		]
 	for line in problems:
 		print(line)
-	print(f"guard_scan: {'FAILED, ' + str(len(problems)) + ' hit(s)' if problems else 'clean'} ({result.count} files scanned)")
+	print(
+		f"guard_scan: {'FAILED, ' + str(len(problems)) + ' hit(s)' if problems else 'clean'} ({result.count} files scanned)"
+	)
 	return 1 if problems else 0
 
 

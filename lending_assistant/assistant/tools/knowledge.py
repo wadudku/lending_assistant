@@ -47,7 +47,9 @@ LOOKUP_KNOWLEDGE_SCHEMA = {
 		"type": "object",
 		"properties": {
 			"doctype": _string_or_null("A Frappe Lending doctype name, for example Loan Repayment."),
-			"action": _string_or_null("What the user does, for example create, submit, waive, or Loan Repayment:create."),
+			"action": _string_or_null(
+				"What the user does, for example create, submit, waive, or Loan Repayment:create."
+			),
 			"br_id": _string_or_null("A BRD requirement id: BR-LMS-123, 123, 170r."),
 			"brd_section": _string_or_null("A BRD section number, for example 7.7 or 7.7.1."),
 			"term": _string_or_null("A glossary, lifecycle or decision term, for example write-off or SMA."),
@@ -64,7 +66,12 @@ GET_CARD_SCHEMA = {
 	"strict": True,
 	"input_schema": {
 		"type": "object",
-		"properties": {"card_id": {"type": "string", "description": "A card id from lookup_knowledge or search_knowledge (at most 200 characters)."}},
+		"properties": {
+			"card_id": {
+				"type": "string",
+				"description": "A card id from lookup_knowledge or search_knowledge (at most 200 characters).",
+			}
+		},
 		"required": ["card_id"],
 		"additionalProperties": False,
 	},
@@ -76,7 +83,10 @@ SEARCH_KNOWLEDGE_SCHEMA = {
 	"input_schema": {
 		"type": "object",
 		"properties": {
-			"query": {"type": "string", "description": "Words describing what to find (at most 500 characters)."},
+			"query": {
+				"type": "string",
+				"description": "Words describing what to find (at most 500 characters).",
+			},
 			"type": {
 				"type": ["string", "null"],
 				"enum": [*store.TYPES, None],
@@ -109,7 +119,9 @@ def _summaries(rows: list[dict]) -> dict:
 	return {"results": rows, "count": len(rows)}
 
 
-def lookup_knowledge(doctype=None, action=None, br_id=None, brd_section=None, term=None, journey=None, dev_item=None) -> str:
+def lookup_knowledge(
+	doctype=None, action=None, br_id=None, brd_section=None, term=None, journey=None, dev_item=None
+) -> str:
 	with guard.read_only_tool_context("lookup_knowledge"):
 		rows = kb_lookup.lookup(
 			doctype=_text_arg(doctype, "doctype"),
@@ -136,7 +148,9 @@ def get_card(card_id) -> str:
 	with guard.read_only_tool_context("get_card"):
 		card = store.get_card(card_id)
 		if card is None:
-			return guard.as_data({"message": NOT_FOUND}, source=SOURCE)  # unknown, draft and malformed ids alike (G4)
+			return guard.as_data(
+				{"message": NOT_FOUND}, source=SOURCE
+			)  # unknown, draft and malformed ids alike (G4)
 		result = {key: card[key] for key in CARD_FIELDS if key in card}
 		budget = guard.MAX_CHARS - HEAD_RESERVE - len(json.dumps(result, ensure_ascii=False))
 		paragraphs, used = [], 0

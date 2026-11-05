@@ -39,7 +39,9 @@ class TestIdentityCheck(GuardTestCase):
 	def assertIdentityIntact(self):
 		self.assertEqual(frappe.session.user, self.user)
 		self.assertIs(frappe.local.db, self.db)
-		self.assertNotIn("System Manager", frappe.get_roles())  # the permission caches are the limited user's again
+		self.assertNotIn(
+			"System Manager", frappe.get_roles()
+		)  # the permission caches are the limited user's again
 
 	# --- the session user
 
@@ -47,7 +49,9 @@ class TestIdentityCheck(GuardTestCase):
 		with self.assertRaises(guard.AssistantGuardError) as caught:
 			with guard.read_only_tool_context("AST-TEST-user-switch") as ctx:
 				frappe.set_user("Administrator")
-				self.assertIn("System Manager", frappe.get_roles())  # the tool really is Administrator in here
+				self.assertIn(
+					"System Manager", frappe.get_roles()
+				)  # the tool really is Administrator in here
 		self.assertIn("identity or connection changed", str(caught.exception))
 		self.assertEqual(ctx.identity_changes, ["session user"])
 		self.assertTrue(ctx.violation)
@@ -63,11 +67,15 @@ class TestIdentityCheck(GuardTestCase):
 			with guard.read_only_tool_context("AST-TEST-user-switch"):
 				frappe.set_user("Administrator")
 				frappe.get_list(LOAN, pluck="name", limit=1)  # warms Administrator's caches
-				self.assertEqual(frappe.get_user().name, "Administrator")  # frappe.local.user_perms is now Administrator's
+				self.assertEqual(
+					frappe.get_user().name, "Administrator"
+				)  # frappe.local.user_perms is now Administrator's
 		self.assertEqual(len(frappe.get_list(LOAN, pluck="name", limit=100)), visible)
 		self.assertEqual(frappe.has_permission("Customer", "create"), user_write)
 		self.assertEqual(sorted(frappe.get_roles()), roles)
-		self.assertEqual(frappe.get_user().name, self.user)  # not the UserPermissions object cached for Administrator
+		self.assertEqual(
+			frappe.get_user().name, self.user
+		)  # not the UserPermissions object cached for Administrator
 
 	def test_assigning_the_session_user_directly_is_reversed(self):
 		with self.assertRaises(guard.AssistantGuardError):
@@ -79,7 +87,9 @@ class TestIdentityCheck(GuardTestCase):
 		original = frappe.local.session
 		with self.assertRaises(guard.AssistantGuardError):
 			with guard.read_only_tool_context("AST-TEST-session-swap"):
-				frappe.local.session = frappe._dict(user="Administrator", sid="Administrator", data=frappe._dict())
+				frappe.local.session = frappe._dict(
+					user="Administrator", sid="Administrator", data=frappe._dict()
+				)
 		self.assertIs(frappe.local.session, original)
 		self.assertIdentityIntact()
 
@@ -205,7 +215,13 @@ class TestIdentityCheck(GuardTestCase):
 			with guard.read_only_tool_context("AST-TEST-switch-then-write") as ctx:
 				frappe.set_user("Administrator")
 				with self.assertRaises(frappe.PermissionError):
-					frappe.get_doc({"doctype": category, "loan_category_code": "AST-NEW-X", "loan_category_name": "AST-NEW-X"}).insert()
+					frappe.get_doc(
+						{
+							"doctype": category,
+							"loan_category_code": "AST-NEW-X",
+							"loan_category_name": "AST-NEW-X",
+						}
+					).insert()
 		self.assertEqual(ctx.trap_hits, 1)
 
 
@@ -242,7 +258,10 @@ class TestCallbackSnapshot(GuardTestCase):
 		self.ran.clear()
 		frappe.db.after_commit.run()  # what the real commit does
 		self.assertEqual(self.ran, ["PRE-X"])  # exactly once at the real commit, INSIDE-SWAP never
-		text = frappe.db.sql("select error from `tabError Log` where method=%s order by creation desc limit 1", "AST write blocked")[0][0]
+		text = frappe.db.sql(
+			"select error from `tabError Log` where method=%s order by creation desc limit 1",
+			"AST write blocked",
+		)[0][0]
 		self.assertIn("callbacks_dropped=1", text)
 		self.assertIn("callbacks_restored=1", text)
 

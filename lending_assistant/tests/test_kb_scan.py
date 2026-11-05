@@ -74,22 +74,49 @@ class TestKbScanner(AssistantTestCase):
 
 	def test_file_changing_calls_are_hits_outside_the_scoped_helpers(self):
 		calls = [
-			"os.remove(p)", "os.unlink(p)", "os.rename(p, p)", "os.replace(p, p)", "os.makedirs(p)", "os.mkdir(p)", "os.rmdir(p)",
-			"os.removedirs(p)", "shutil.copy(p, p)", "shutil.copy2(p, p)", "shutil.copytree(p, p)", "shutil.move(p, p)",
-			"os.chmod(p, 0)", "os.symlink(p, p)", "os.link(p, p)", "os.truncate(p, 0)", "Path(p).unlink()", "Path(p).rename(p)",
-			"Path(p).replace(p)", "Path(p).mkdir()", "Path(p).chmod(0)", "Path(p).symlink_to(p) or Path(p).unlink()",
-			"pathlib.Path(p).replace(p)", "p.replace(q)",
+			"os.remove(p)",
+			"os.unlink(p)",
+			"os.rename(p, p)",
+			"os.replace(p, p)",
+			"os.makedirs(p)",
+			"os.mkdir(p)",
+			"os.rmdir(p)",
+			"os.removedirs(p)",
+			"shutil.copy(p, p)",
+			"shutil.copy2(p, p)",
+			"shutil.copytree(p, p)",
+			"shutil.move(p, p)",
+			"os.chmod(p, 0)",
+			"os.symlink(p, p)",
+			"os.link(p, p)",
+			"os.truncate(p, 0)",
+			"Path(p).unlink()",
+			"Path(p).rename(p)",
+			"Path(p).replace(p)",
+			"Path(p).mkdir()",
+			"Path(p).chmod(0)",
+			"Path(p).symlink_to(p) or Path(p).unlink()",
+			"pathlib.Path(p).replace(p)",
+			"p.replace(q)",
 		]
 		for path in ("kb/lookup.py", "assistant/tools/knowledge.py", "kb/ingest.py"):
 			for call in calls:
 				with self.subTest(path=path, call=call):
-					code = "import os\nimport shutil\nimport pathlib\nfrom pathlib import Path\n\ndef f(p, q):\n    return " + call + "\n"
+					code = (
+						"import os\nimport shutil\nimport pathlib\nfrom pathlib import Path\n\ndef f(p, q):\n    return "
+						+ call
+						+ "\n"
+					)
 					result = run("--root", self.make_tree({path: code}))
 					self.assertEqual(result.returncode, 1, result.stdout)
 					self.assertIn("[file-access]", result.stdout)
 
 	def test_a_marked_makedirs_and_remove_are_accepted_only_in_their_helpers(self):
-		for fn, call in (("_make_dirs", "os.makedirs(p)"), ("_remove_file", "os.remove(p)"), ("_write_bytes", "os.replace(p, p)")):
+		for fn, call in (
+			("_make_dirs", "os.makedirs(p)"),
+			("_remove_file", "os.remove(p)"),
+			("_write_bytes", "os.replace(p, p)"),
+		):
 			code = f"import os\n\ndef {fn}(p):\n    {call}  # AST-ALLOWED: checked inside the folder\n"
 			self.assertEqual(run("--root", self.make_tree({"kb/ingest.py": code})).returncode, 0, fn)
 			other = code.replace(fn, "_other")
@@ -131,7 +158,15 @@ class TestKbScanner(AssistantTestCase):
 		self.assertEqual(result.returncode, 1, result.stdout)
 
 	def test_frappe_db_reads_stay_banned_in_every_kb_file(self):
-		for path in ("kb/store.py", "kb/ingest.py", "kb/validate.py", "kb/lookup.py", "kb/search.py", "kb/retrieve.py", "assistant/tools/knowledge.py"):
+		for path in (
+			"kb/store.py",
+			"kb/ingest.py",
+			"kb/validate.py",
+			"kb/lookup.py",
+			"kb/search.py",
+			"kb/retrieve.py",
+			"assistant/tools/knowledge.py",
+		):
 			with self.subTest(path=path):
 				code = "import frappe\n\ndef _read_text():\n    return frappe.db.exists('DocType', 'Loan')  # AST-ALLOWED: because\n"
 				result = run("--root", self.make_tree({path: code}))

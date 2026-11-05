@@ -73,9 +73,13 @@ def _entry(function, schema, needs_switch, source) -> dict:
 
 
 TOOLS = {
-	"lookup_knowledge": _entry(knowledge.lookup_knowledge, knowledge.LOOKUP_KNOWLEDGE_SCHEMA, None, "analysis"),
+	"lookup_knowledge": _entry(
+		knowledge.lookup_knowledge, knowledge.LOOKUP_KNOWLEDGE_SCHEMA, None, "analysis"
+	),
 	"get_card": _entry(knowledge.get_card, knowledge.GET_CARD_SCHEMA, None, "analysis"),
-	"search_knowledge": _entry(knowledge.search_knowledge, knowledge.SEARCH_KNOWLEDGE_SCHEMA, None, "analysis"),
+	"search_knowledge": _entry(
+		knowledge.search_knowledge, knowledge.SEARCH_KNOWLEDGE_SCHEMA, None, "analysis"
+	),
 	# meta and permission facts, no business data (check_my_access with a docname needs Live data inside the guard)
 	"get_screen_help": _entry(live.get_screen_help, live.GET_SCREEN_HELP_SCHEMA, None, "live_site"),
 	"check_my_access": _entry(live.check_my_access, live.CHECK_MY_ACCESS_SCHEMA, None, "live_site"),
@@ -121,7 +125,9 @@ def _check(value, spec: dict, path: str, tool: str):
 	"""Return a cleaned copy of `value`, or raise ToolError. Never echoes a value."""
 	types = _types(spec)
 	if not any(_is_type(value, t) for t in types):
-		raise ToolError(f"Argument '{path}' has the wrong type: expected {' or '.join(str(t) for t in types)}.")
+		raise ToolError(
+			f"Argument '{path}' has the wrong type: expected {' or '.join(str(t) for t in types)}."
+		)
 	if "enum" in spec and value not in spec["enum"]:
 		raise ToolError(f"Argument '{path}' is not one of the allowed values.")
 	limit_key = f"{tool}.{path}"
@@ -149,7 +155,9 @@ def _check_object(value: dict, spec: dict, path: str, tool: str) -> dict:
 		where = f"{path}.{key}" if path else key
 		if key not in value:
 			if "null" in _types(sub):
-				clean[key] = None  # strict mode always sends every key; this only helps callers that leave one out
+				clean[key] = (
+					None  # strict mode always sends every key; this only helps callers that leave one out
+				)
 				continue
 			raise ToolError(f"Missing argument '{where}'.")
 		clean[key] = _check(value[key], sub, where, tool)
@@ -227,8 +235,12 @@ def dispatch(name, args=None) -> ToolResult:
 
 	ctx, result, error = None, None, None
 	try:
-		with guard.identity_watch(name):  # #48: the request's connection and user are still the same afterwards
-			with guard.read_only_tool_context(name) as ctx:  # #49 I1: held, so a swallowed trap error is still seen
+		with guard.identity_watch(
+			name
+		):  # #48: the request's connection and user are still the same afterwards
+			with guard.read_only_tool_context(
+				name
+			) as ctx:  # #49 I1: held, so a swallowed trap error is still seen
 				result = entry["function"](**cleaned)
 	except guard.AssistantGuardError:
 		raise  # fail closed: already logged by the guard
@@ -246,9 +258,20 @@ def dispatch(name, args=None) -> ToolResult:
 
 	if ctx is not None:
 		counts = ctx.summary()
-		if any(counts[k] for k in ("db_writes", "callbacks_dropped", "callbacks_restored", "identity_changes", "savepoint_gone")):
+		if any(
+			counts[k]
+			for k in (
+				"db_writes",
+				"callbacks_dropped",
+				"callbacks_restored",
+				"identity_changes",
+				"savepoint_gone",
+			)
+		):
 			_log("guard_failure", name)
-			raise guard.AssistantGuardError(f"Tool {name} wrote or changed state inside the read-only context.")
+			raise guard.AssistantGuardError(
+				f"Tool {name} wrote or changed state inside the read-only context."
+			)
 		if counts["trap_hits"]:  # a write was tried and refused by the trap; any result is discarded
 			return _refuse("write_refused", name, GUARD_MESSAGE)
 	if error:

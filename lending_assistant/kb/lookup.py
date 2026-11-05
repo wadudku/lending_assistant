@@ -35,7 +35,9 @@ W_ROUTE = 35
 W_ROUTE_SCREEN = 30
 
 _BR = re.compile(r"^(?:BR[\s_\-]?)?(?:(LMS|LOS|INT|GOV)[\s_\-]?)?(\d{1,3})([a-z])?$", re.I)
-_SECTION = re.compile(r"^(?:(?:section|sec|clause|chapter|brd|para)\s*)?§?\s*(\d{1,2}(?:\.\d{1,2}){0,3})$", re.I)
+_SECTION = re.compile(
+	r"^(?:(?:section|sec|clause|chapter|brd|para)\s*)?§?\s*(\d{1,2}(?:\.\d{1,2}){0,3})$", re.I
+)
 _DEV = re.compile(r"^(?:dev(?:elopment)?[\s_\-]*item[\s_\-]*)?D?[\s_\-]*(\d{1,2})$", re.I)
 _JOURNEY = re.compile(r"^(?:J|journey[\s_\-]*J?)[\s_\-]*(\d{1,2})$", re.I)
 _SEP = re.compile(r"[\s_\-]+")
@@ -63,7 +65,9 @@ def vocabulary(st) -> dict:
 		for key in st.map("by_doctype"):
 			doctypes.setdefault(norm_term(key), key)
 		screens = {
-			entry["doctypes"][0]: cid for cid, entry in st.cards.items() if entry["type"] == "screen" and entry.get("doctypes")
+			entry["doctypes"][0]: cid
+			for cid, entry in st.cards.items()
+			if entry["type"] == "screen" and entry.get("doctypes")
 		}
 		cache = st.derived["lookup"] = {"terms": terms, "doctypes": doctypes, "screens": screens}
 	return cache
@@ -163,7 +167,12 @@ def score_keys(st, keys: dict) -> dict[str, int]:
 
 	for key in keys.get("br_id", []):
 		for cid in br_cards(key, st):
-			add(cid, W_BR_NAMED if cid.endswith("." + key) and cid.split(".")[0] in ("concept", "bridge") else W_BR)
+			add(
+				cid,
+				W_BR_NAMED
+				if cid.endswith("." + key) and cid.split(".")[0] in ("concept", "bridge")
+				else W_BR,
+			)
 	for key in keys.get("dev_item", []):
 		add(f"devitem.{key}", W_DEV)  # only the dev item card (#103)
 	for key in keys.get("journey", []):
@@ -177,7 +186,14 @@ def score_keys(st, keys: dict) -> dict[str, int]:
 			listed = st.map("by_brd_section").get(node)
 			if listed is not None:
 				for cid in listed:
-					add(cid, W_SECTION_NAMED if cid == f"brd_section.{node}" else W_SECTION if node == key else W_SECTION_PARENT)
+					add(
+						cid,
+						W_SECTION_NAMED
+						if cid == f"brd_section.{node}"
+						else W_SECTION
+						if node == key
+						else W_SECTION_PARENT,
+					)
 				break
 			node = node.rpartition(".")[0]
 	for key in keys.get("term", []):
@@ -209,7 +225,9 @@ def rank(st, scores: dict[str, int], tilt: dict[str, int] | None = None, tie=Non
 	return sorted(scores, key=sort_key)
 
 
-def lookup(doctype=None, action=None, br_id=None, brd_section=None, term=None, journey=None, dev_item=None, st=None):
+def lookup(
+	doctype=None, action=None, br_id=None, brd_section=None, term=None, journey=None, dev_item=None, st=None
+):
 	"""Ranked summaries (at most 10) for the given keys. Any key that is empty or unknown is ignored."""
 	st = st or store.load()
 	keys: dict[str, list[str]] = {}

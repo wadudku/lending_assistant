@@ -18,8 +18,14 @@ SEARCH_CODE_SCHEMA = {
 		"type": "object",
 		"properties": {
 			"query": {"type": "string", "description": "The text to find, at most 200 characters."},
-			"app": {"type": ["string", "null"], "description": "Only search this app, or null for all readable apps."},
-			"path_glob": {"type": ["string", "null"], "description": "A short relative pattern such as *loan_repayment*, or null."},
+			"app": {
+				"type": ["string", "null"],
+				"description": "Only search this app, or null for all readable apps.",
+			},
+			"path_glob": {
+				"type": ["string", "null"],
+				"description": "A short relative pattern such as *loan_repayment*, or null.",
+			},
 		},
 		"required": ["query", "app", "path_glob"],
 		"additionalProperties": False,
@@ -36,8 +42,14 @@ READ_CODE_SCHEMA = {
 		"type": "object",
 		"properties": {
 			"path": {"type": "string", "description": "<app>/<path inside the app repo>."},
-			"start_line": {"type": ["integer", "null"], "description": "First line, 1 or more; null means 1."},
-			"end_line": {"type": ["integer", "null"], "description": "Last line; null or more than 200 lines after start_line is cut to 200 lines."},
+			"start_line": {
+				"type": ["integer", "null"],
+				"description": "First line, 1 or more; null means 1.",
+			},
+			"end_line": {
+				"type": ["integer", "null"],
+				"description": "Last line; null or more than 200 lines after start_line is cut to 200 lines.",
+			},
 		},
 		"required": ["path", "start_line", "end_line"],
 		"additionalProperties": False,

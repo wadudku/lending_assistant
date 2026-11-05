@@ -22,7 +22,9 @@ _CACHE: dict = {}
 
 
 def _read_text(path: str) -> str:
-	with open(path, encoding="utf-8") as handle:  # AST-ALLOWED: reads an ingested knowledge file; path from the checked index
+	with open(  # AST-ALLOWED: reads an ingested knowledge file; path from the checked index
+		path, encoding="utf-8"
+	) as handle:
 		return handle.read()
 
 
@@ -104,7 +106,9 @@ class Store:
 	def __init__(self, root: str, index: dict):
 		self.root = root
 		self.index = index
-		self.cards = {cid: dict(entry) for cid, entry in index["cards"].items() if entry.get("status") == "approved"}
+		self.cards = {
+			cid: dict(entry) for cid, entry in index["cards"].items() if entry.get("status") == "approved"
+		}
 		for cid, entry in self.cards.items():
 			if not CARD_ID.match(cid) or entry.get("type") not in TYPES:
 				raise ValueError(f"bad card entry in index.json: {cid!r}")
@@ -149,7 +153,9 @@ def load(root: str | None = None) -> Store:
 		try:
 			index = json.loads(_read_text(index_path))
 		except OSError:
-			raise RuntimeError("The knowledge base has not been ingested (kb/knowledge/index.json is missing).")
+			raise RuntimeError(
+				"The knowledge base has not been ingested (kb/knowledge/index.json is missing)."
+			)
 		store = _CACHE[root] = Store(root, index)
 	return store
 

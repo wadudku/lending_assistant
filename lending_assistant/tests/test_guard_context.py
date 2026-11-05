@@ -15,7 +15,9 @@ CATEGORY = "Loan Category"
 
 def row(name):
 	"""Fresh raw read, outside any cache."""
-	return frappe.db.sql("select name, loan_category_name, modified from `tabLoan Category` where name=%s", name)
+	return frappe.db.sql(
+		"select name, loan_category_name, modified from `tabLoan Category` where name=%s", name
+	)
 
 
 def category_count():
@@ -31,7 +33,9 @@ class TestReadOnlyContext(GuardTestCase):
 		super().setUp()
 		frappe.set_user("Administrator")
 		tag = "AST-CAT-" + uuid.uuid4().hex[:8]  # tests share one transaction per class: names must be unique
-		self.cat = frappe.get_doc({"doctype": CATEGORY, "loan_category_code": tag, "loan_category_name": tag}).insert()
+		self.cat = frappe.get_doc(
+			{"doctype": CATEGORY, "loan_category_code": tag, "loan_category_name": tag}
+		).insert()
 		self.before = row(self.cat.name)
 		self.count = category_count()
 		self.logs = error_logs()
@@ -48,7 +52,9 @@ class TestReadOnlyContext(GuardTestCase):
 	def test_insert_blocked(self):
 		with guard.read_only_tool_context("AST-TEST-t") as ctx:
 			with self.assertRaises(frappe.PermissionError):
-				frappe.get_doc({"doctype": CATEGORY, "loan_category_code": "AST-NEW", "loan_category_name": "AST-NEW"}).insert()
+				frappe.get_doc(
+					{"doctype": CATEGORY, "loan_category_code": "AST-NEW", "loan_category_name": "AST-NEW"}
+				).insert()
 		self.assertEqual(ctx.trap_hits, 1)
 		self.assertUnchanged()
 
@@ -79,12 +85,16 @@ class TestReadOnlyContext(GuardTestCase):
 				"posting_date": today(),
 				"voucher_type": "Journal Entry",
 				"accounts": [
-					{"account": "Administrative Expenses - PT", "debit_in_account_currency": 1, "cost_center": "Main - PT"},
+					{
+						"account": "Administrative Expenses - PT",
+						"debit_in_account_currency": 1,
+						"cost_center": "Main - PT",
+					},
 					{"account": "Cash - PT", "credit_in_account_currency": 1, "cost_center": "Main - PT"},
 				],
 			}
 		).insert()
-		with guard.read_only_tool_context("AST-TEST-t") as ctx:
+		with guard.read_only_tool_context("AST-TEST-t"):
 			with self.assertRaises(frappe.PermissionError):
 				je.submit()
 		self.assertEqual(frappe.db.get_value("Journal Entry", je.name, "docstatus"), 0)
@@ -120,7 +130,9 @@ class TestReadOnlyContext(GuardTestCase):
 
 	def test_raw_sql_update_rolled_back_and_recorded(self):
 		with guard.read_only_tool_context("AST-TEST-sql_tool") as ctx:
-			frappe.db.sql("update `tabLoan Category` set loan_category_name='AST-HACKED' where name=%s", self.cat.name)
+			frappe.db.sql(
+				"update `tabLoan Category` set loan_category_name='AST-HACKED' where name=%s", self.cat.name
+			)
 		self.assertGreaterEqual(ctx.db_writes, 1)
 		self.assertUnchanged()
 
@@ -134,7 +146,9 @@ class TestReadOnlyContext(GuardTestCase):
 				doc = frappe.get_doc(CATEGORY, self.cat.name)
 				doc.loan_category_name = "AST-BYPASS"
 				doc.save()
-				frappe.get_doc({"doctype": CATEGORY, "loan_category_code": "AST-B2", "loan_category_name": "AST-B2"}).insert()
+				frappe.get_doc(
+					{"doctype": CATEGORY, "loan_category_code": "AST-B2", "loan_category_name": "AST-B2"}
+				).insert()
 		self.assertGreaterEqual(ctx.db_writes, 2)
 		self.assertIn("guard flag changed inside the context", ctx.identity_changes)
 		self.assertUnchanged()
@@ -160,22 +174,32 @@ class TestReadOnlyContext(GuardTestCase):
 	# --- exact restore, nesting
 
 	def test_state_restored_after_success_and_after_error(self):
-		flag, control, writes = frappe.flags.ast_read_only, frappe.db._disable_transaction_control, frappe.db.transaction_writes
+		flag, control, writes = (
+			frappe.flags.ast_read_only,
+			frappe.db._disable_transaction_control,
+			frappe.db.transaction_writes,
+		)
 		with guard.read_only_tool_context("AST-TEST-t"):
 			self.assertTrue(frappe.flags.ast_read_only)
 			self.assertEqual(frappe.db._disable_transaction_control, control + 1)
-		self.assertEqual((frappe.flags.ast_read_only, frappe.db._disable_transaction_control), (flag, control))
+		self.assertEqual(
+			(frappe.flags.ast_read_only, frappe.db._disable_transaction_control), (flag, control)
+		)
 		with self.assertRaises(ValueError):
 			with guard.read_only_tool_context("AST-TEST-t"):
 				frappe.get_doc(CATEGORY, self.cat.name)
 				raise ValueError("tool failed")
-		self.assertEqual((frappe.flags.ast_read_only, frappe.db._disable_transaction_control), (flag, control))
+		self.assertEqual(
+			(frappe.flags.ast_read_only, frappe.db._disable_transaction_control), (flag, control)
+		)
 		self.assertEqual(frappe.db.transaction_writes, writes)
 		with self.assertRaises(ValueError):  # an error AND a write: the write is still undone
 			with guard.read_only_tool_context("AST-TEST-t"):
 				frappe.db.set_value(CATEGORY, self.cat.name, "loan_category_name", "AST-X")
 				raise ValueError("tool failed")
-		self.assertEqual((frappe.flags.ast_read_only, frappe.db._disable_transaction_control), (flag, control))
+		self.assertEqual(
+			(frappe.flags.ast_read_only, frappe.db._disable_transaction_control), (flag, control)
+		)
 		self.assertUnchanged()
 
 	def test_nested_context_keeps_the_outer_flag(self):
@@ -195,7 +219,9 @@ class TestReadOnlyContext(GuardTestCase):
 	def test_writes_before_the_context_survive_it(self):
 		frappe.set_user("Administrator")
 		tag = "AST-CAT-" + uuid.uuid4().hex[:8]
-		other = frappe.get_doc({"doctype": CATEGORY, "loan_category_code": tag, "loan_category_name": tag}).insert()
+		other = frappe.get_doc(
+			{"doctype": CATEGORY, "loan_category_code": tag, "loan_category_name": tag}
+		).insert()
 		self.as_user("senior")
 		with guard.read_only_tool_context("AST-TEST-t"):
 			frappe.db.set_value(CATEGORY, other.name, "loan_category_name", "AST-LATER")
@@ -205,7 +231,10 @@ class TestReadOnlyContext(GuardTestCase):
 		with guard.read_only_tool_context("AST-TEST-log_tool"):
 			frappe.db.set_value(CATEGORY, self.cat.name, "loan_category_name", "AST-SECRET-VALUE")
 		frappe.set_user("Administrator")
-		text = frappe.db.sql("select error from `tabError Log` where method=%s order by creation desc limit 1", "AST write blocked")[0][0]
+		text = frappe.db.sql(
+			"select error from `tabError Log` where method=%s order by creation desc limit 1",
+			"AST write blocked",
+		)[0][0]
 		self.assertIn("AST-TEST-log_tool", text)
 		self.assertNotIn("AST-SECRET-VALUE", text)
 		self.assertNotIn(self.cat.name, text)
@@ -241,7 +270,10 @@ class TestReadOnlyContext(GuardTestCase):
 		self.assertEqual(sorted(ran), sorted("before-" + n for n in self.CALLBACK_MANAGERS))
 		self.assertIsNone(get_job(job), "the job deferred to after-commit was queued")
 		self.assertEqual(error_logs(), self.logs + 1)
-		text = frappe.db.sql("select error from `tabError Log` where method=%s order by creation desc limit 1", "AST write blocked")[0][0]
+		text = frappe.db.sql(
+			"select error from `tabError Log` where method=%s order by creation desc limit 1",
+			"AST write blocked",
+		)[0][0]
 		self.assertIn("callbacks_dropped=5", text)
 
 	def test_the_job_check_can_see_a_job(self):
@@ -293,21 +325,36 @@ class TestReadOnlyContext(GuardTestCase):
 
 	def test_a_log_row_from_a_real_tool_name_is_not_removed(self):
 		frappe.set_user("Administrator")
-		frappe.log_error(title="AST write blocked", message="user=x tool=real_tool db_writes_rolled_back=1 trap_refusals=0")
+		frappe.log_error(
+			title="AST write blocked", message="user=x tool=real_tool db_writes_rolled_back=1 trap_refusals=0"
+		)
 		kept = error_logs()
 		self.remove_violation_logs()
 		self.assertEqual(error_logs(), kept)
-		frappe.db.delete("Error Log", {"method": "AST write blocked", "error": ["like", "%tool=real_tool %"]})  # this test's own row
+		frappe.db.delete(
+			"Error Log", {"method": "AST write blocked", "error": ["like", "%tool=real_tool %"]}
+		)  # this test's own row
 
 	# --- the trap does nothing outside the context
 
 	def test_trap_is_registered_for_all_eight_events(self):
 		events = frappe.get_hooks("doc_events")["*"]
-		for event in ("before_insert", "before_validate", "before_save", "on_update", "before_submit", "before_cancel", "on_trash", "before_rename"):
+		for event in (
+			"before_insert",
+			"before_validate",
+			"before_save",
+			"on_update",
+			"before_submit",
+			"before_cancel",
+			"on_trash",
+			"before_rename",
+		):
 			self.assertIn("lending_assistant.assistant.guard.block_if_read_only", events[event], event)
 
 	def test_trap_is_inert_outside_the_context(self):
-		doc = frappe.get_doc({"doctype": CATEGORY, "loan_category_code": "AST-OUT", "loan_category_name": "AST-OUT"}).insert()
+		doc = frappe.get_doc(
+			{"doctype": CATEGORY, "loan_category_code": "AST-OUT", "loan_category_name": "AST-OUT"}
+		).insert()
 		doc.loan_category_name = "AST-OUT-2"
 		doc.save()
 		self.assertEqual(row(doc.name)[0][1], "AST-OUT-2")

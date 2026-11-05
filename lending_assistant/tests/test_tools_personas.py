@@ -35,8 +35,12 @@ class TestToolsPerPersona(ToolTestCase):
 		self.visible, self.hidden = self.loan_names()
 		frappe.set_user("Administrator")  # fixtures only
 		self.all_loan_count = len(frappe.get_all("Loan", pluck="name", limit=0))
-		self.pl_emi_count = len(frappe.get_all("Loan", filters={"loan_product": "PL-EMI"}, pluck="name", limit=0))
-		self.never_send = {(r.ref_doctype, r.fieldname) for r in frappe.get_doc("Assistant Settings").never_send_fields}
+		self.pl_emi_count = len(
+			frappe.get_all("Loan", filters={"loan_product": "PL-EMI"}, pluck="name", limit=0)
+		)
+		self.never_send = {
+			(r.ref_doctype, r.fieldname) for r in frappe.get_doc("Assistant Settings").never_send_fields
+		}
 		self.password_fields = {
 			(dt, df.fieldname)
 			for dt in (r.allowed_doctype for r in frappe.get_doc("Assistant Settings").doctype_allowlist)
@@ -66,7 +70,9 @@ class TestToolsPerPersona(ToolTestCase):
 				self.assertEqual(data["doctype"], "Loan")
 				self.assertTrue(data["fields"])
 				for field in data["fields"]:
-					self.assertEqual(set(field), {"fieldname", "label", "fieldtype", "options", "reqd", "description"})
+					self.assertEqual(
+						set(field), {"fieldname", "label", "fieldtype", "options", "reqd", "description"}
+					)
 				names = {f["fieldname"] for f in data["fields"]}
 				self.assertFalse(names & FORBIDDEN_FIELDS)
 				self.assertFalse({n for n in names if n.startswith("_")})
@@ -92,12 +98,18 @@ class TestToolsPerPersona(ToolTestCase):
 
 	def test_get_screen_help_hides_a_field_above_the_users_permlevel(self):
 		self.as_persona("limited")
-		names = {f["fieldname"] for f in self.data(self.call("get_screen_help", doctype="Loan", search="loan_product"))["fields"]}
+		names = {
+			f["fieldname"]
+			for f in self.data(self.call("get_screen_help", doctype="Loan", search="loan_product"))["fields"]
+		}
 		self.assertIn("loan_product", names)
 		frappe.set_user("Administrator")
 		self.set_permlevel("Loan", "loan_product", 9)
 		self.as_persona("limited")
-		names = {f["fieldname"] for f in self.data(self.call("get_screen_help", doctype="Loan", search="loan_product"))["fields"]}
+		names = {
+			f["fieldname"]
+			for f in self.data(self.call("get_screen_help", doctype="Loan", search="loan_product"))["fields"]
+		}
 		self.assertNotIn("loan_product", names)
 
 	def test_check_my_access_per_persona_matches_has_permission_and_names_the_roles(self):
@@ -111,8 +123,13 @@ class TestToolsPerPersona(ToolTestCase):
 					with self.subTest(who=who, doctype=doctype, action=action):
 						entry = data["actions"][action]
 						self.assertEqual(entry["allowed"], bool(frappe.has_permission(doctype, action)))
-						self.assertEqual(set(entry["you_have_a_role"]), my_roles & set(entry["roles_that_can"]))
-						self.assertTrue(entry["roles_that_can"] or entry["owner_only_roles"], "someone must hold the action")
+						self.assertEqual(
+							set(entry["you_have_a_role"]), my_roles & set(entry["roles_that_can"])
+						)
+						self.assertTrue(
+							entry["roles_that_can"] or entry["owner_only_roles"],
+							"someone must hold the action",
+						)
 		# ast-noaccess is told nothing is allowed, and which roles would do it
 		self.as_persona("noaccess")
 		data = self.data(self.call("check_my_access", doctype="Loan", actions=["read"], docname=None))
@@ -129,9 +146,15 @@ class TestToolsPerPersona(ToolTestCase):
 		self.assertEqual(self.error(hidden), guard.NOT_FOUND)
 		self.assertEqual(hidden, missing)  # byte-identical: the same ToolResult
 		self.as_persona("senior")
-		self.assertTrue(self.data(self.call("check_my_access", doctype="Loan", actions=["read"], docname=self.hidden))["actions"]["read"]["allowed"])
+		self.assertTrue(
+			self.data(self.call("check_my_access", doctype="Loan", actions=["read"], docname=self.hidden))[
+				"actions"
+			]["read"]["allowed"]
+		)
 		self.as_persona("noaccess")
-		self.assertEqual(self.call("check_my_access", doctype="Loan", actions=["read"], docname=self.visible), missing)
+		self.assertEqual(
+			self.call("check_my_access", doctype="Loan", actions=["read"], docname=self.visible), missing
+		)
 
 	# --- find_records
 
@@ -139,7 +162,16 @@ class TestToolsPerPersona(ToolTestCase):
 		self.as_persona("limited")
 		for limit in (None, 20, 50, 10**9):
 			with self.subTest(limit=limit):
-				data = self.data(self.call("find_records", doctype="Loan", filters=[], fields=["name", "loan_product"], order_by=None, limit=limit))
+				data = self.data(
+					self.call(
+						"find_records",
+						doctype="Loan",
+						filters=[],
+						fields=["name", "loan_product"],
+						order_by=None,
+						limit=limit,
+					)
+				)
 				self.assertEqual(data["count_returned"], LIMITED_VISIBLE_LOANS)
 				self.assertEqual({r["loan_product"] for r in data["rows"]}, {"PL-EMI"})
 				self.assertFalse(data["may_be_partial"])
@@ -147,7 +179,10 @@ class TestToolsPerPersona(ToolTestCase):
 
 	def test_find_records_filters_cannot_reach_other_products_for_limited(self):
 		self.as_persona("limited")
-		other = lambda op, value, values: [{"field": "loan_product", "operator": op, "value": value, "values": values}]  # noqa: E731
+
+		def other(op, value, values):
+			return [{"field": "loan_product", "operator": op, "value": value, "values": values}]
+
 		for label, filters in (
 			("!=", other("!=", "PL-EMI", None)),
 			("in", other("in", None, ["PL-EMI", "PL-OTHER", "x"])),
@@ -157,17 +192,44 @@ class TestToolsPerPersona(ToolTestCase):
 			("two bounds", [*other(">", "", None), *other("<", "zzzz", None)]),
 		):
 			with self.subTest(filters=label):
-				data = self.data(self.call("find_records", doctype="Loan", filters=filters, fields=["name", "loan_product"], order_by=None, limit=20))
+				data = self.data(
+					self.call(
+						"find_records",
+						doctype="Loan",
+						filters=filters,
+						fields=["name", "loan_product"],
+						order_by=None,
+						limit=20,
+					)
+				)
 				self.assertLessEqual(data["count_returned"], LIMITED_VISIBLE_LOANS)
 				self.assertTrue({r["loan_product"] for r in data["rows"]} <= {"PL-EMI"})
-		data = self.data(self.call("find_records", doctype="Loan", filters=other("!=", "PL-EMI", None), fields=["name"], order_by=None, limit=20))
+		data = self.data(
+			self.call(
+				"find_records",
+				doctype="Loan",
+				filters=other("!=", "PL-EMI", None),
+				fields=["name"],
+				order_by=None,
+				limit=20,
+			)
+		)
 		self.assertEqual(data["rows"], [])
 
 	def test_find_records_seniors_see_a_full_page_and_may_be_partial(self):
 		for who in ("senior", "dev"):
 			with self.subTest(who=who):
 				self.as_persona(who)
-				data = self.data(self.call("find_records", doctype="Loan", filters=[], fields=["name", "loan_product"], order_by=None, limit=None))
+				data = self.data(
+					self.call(
+						"find_records",
+						doctype="Loan",
+						filters=[],
+						fields=["name", "loan_product"],
+						order_by=None,
+						limit=None,
+					)
+				)
 				self.assertEqual(data["count_returned"], 20)
 				self.assertTrue(data["may_be_partial"])
 				self.assertNotIn("total", data)
@@ -175,25 +237,69 @@ class TestToolsPerPersona(ToolTestCase):
 
 	def test_find_records_noaccess_is_refused(self):
 		self.as_persona("noaccess")
-		self.assertTrue(self.call("find_records", doctype="Loan", filters=[], fields=["name"], order_by=None, limit=None).is_error)
+		self.assertTrue(
+			self.call(
+				"find_records", doctype="Loan", filters=[], fields=["name"], order_by=None, limit=None
+			).is_error
+		)
 
 	def test_find_records_refuses_unreadable_never_send_and_identity_fields(self):
 		self.as_persona("senior")
-		for doctype, field in (("Customer", "mobile_no"), ("Customer", "email_id"), ("Loan Disbursement", "bank_account"), ("Loan", "owner"), ("Loan", "modified_by"), ("Loan", "_comments")):
+		for doctype, field in (
+			("Customer", "mobile_no"),
+			("Customer", "email_id"),
+			("Loan Disbursement", "bank_account"),
+			("Loan", "owner"),
+			("Loan", "modified_by"),
+			("Loan", "_comments"),
+		):
 			with self.subTest(field=field):
-				as_field = self.call("find_records", doctype=doctype, filters=[], fields=["name", field], order_by=None, limit=None)
-				as_filter = self.call("find_records", doctype=doctype, filters=[{"field": field, "operator": "like", "value": "%", "values": None}], fields=["name"], order_by=None, limit=None)
-				as_order = self.call("find_records", doctype=doctype, filters=[], fields=["name"], order_by=f"{field} asc", limit=None)
+				as_field = self.call(
+					"find_records",
+					doctype=doctype,
+					filters=[],
+					fields=["name", field],
+					order_by=None,
+					limit=None,
+				)
+				as_filter = self.call(
+					"find_records",
+					doctype=doctype,
+					filters=[{"field": field, "operator": "like", "value": "%", "values": None}],
+					fields=["name"],
+					order_by=None,
+					limit=None,
+				)
+				as_order = self.call(
+					"find_records",
+					doctype=doctype,
+					filters=[],
+					fields=["name"],
+					order_by=f"{field} asc",
+					limit=None,
+				)
 				for result in (as_field, as_filter, as_order):
 					self.assertTrue(result.is_error, f"{doctype}.{field}")
 					self.assertNotIn(field, result.content.replace("not available", ""))
 
 	def test_find_records_output_never_holds_owner_or_modified_by_even_when_asked_for_everything_else(self):
 		self.as_persona("dev")
-		fields = [f["fieldname"] for f in self.data(self.call("get_screen_help", doctype="Loan", search=None))["fields"]][:30]
-		data = self.data(self.call("find_records", doctype="Loan", filters=[], fields=fields, order_by=None, limit=3))
+		fields = [
+			f["fieldname"]
+			for f in self.data(self.call("get_screen_help", doctype="Loan", search=None))["fields"]
+		][:30]
+		data = self.data(
+			self.call("find_records", doctype="Loan", filters=[], fields=fields, order_by=None, limit=3)
+		)
 		self.assertFalse(set(all_field_names(data)) & FORBIDDEN_FIELDS)
-		self.assertLessEqual(len(self.call("find_records", doctype="Loan", filters=[], fields=fields, order_by=None, limit=20).content), guard.MAX_CHARS)
+		self.assertLessEqual(
+			len(
+				self.call(
+					"find_records", doctype="Loan", filters=[], fields=fields, order_by=None, limit=20
+				).content
+			),
+			guard.MAX_CHARS,
+		)
 
 	# --- get_record
 
@@ -206,7 +312,9 @@ class TestToolsPerPersona(ToolTestCase):
 				self.assertFalse(set(all_field_names(data)) & FORBIDDEN_FIELDS)
 				self.assertTrue(data["children"] is not None)
 		self.as_persona("noaccess")
-		self.assertEqual(self.error(self.call("get_record", doctype="Loan", name=self.visible)), guard.NOT_FOUND)
+		self.assertEqual(
+			self.error(self.call("get_record", doctype="Loan", name=self.visible)), guard.NOT_FOUND
+		)
 
 	def test_get_record_the_hidden_loan_and_a_missing_one_give_the_identical_reply(self):
 		self.as_persona("limited")
@@ -218,7 +326,9 @@ class TestToolsPerPersona(ToolTestCase):
 			with self.subTest(name=name[:20]):
 				self.assertEqual(self.call("get_record", doctype="Loan", name=name), missing)
 		self.as_persona("senior")
-		self.assertFalse(self.call("get_record", doctype="Loan", name=self.hidden).is_error)  # the senior can read it
+		self.assertFalse(
+			self.call("get_record", doctype="Loan", name=self.hidden).is_error
+		)  # the senior can read it
 		self.as_persona("noaccess")
 		self.assertEqual(self.call("get_record", doctype="Loan", name=self.hidden), missing)
 
@@ -259,9 +369,20 @@ class TestToolsPerPersona(ToolTestCase):
 		for who in (*READERS, "noaccess"):
 			with self.subTest(who=who):
 				self.as_persona(who)
-				self.assertEqual(self.call("search_knowledge", query="repayment", type=None).source, "analysis")
 				self.assertEqual(
-					self.call("lookup_knowledge", doctype="Loan Repayment", action=None, br_id=None, brd_section=None, term=None, journey=None, dev_item=None).source,
+					self.call("search_knowledge", query="repayment", type=None).source, "analysis"
+				)
+				self.assertEqual(
+					self.call(
+						"lookup_knowledge",
+						doctype="Loan Repayment",
+						action=None,
+						br_id=None,
+						brd_section=None,
+						term=None,
+						journey=None,
+						dev_item=None,
+					).source,
 					"analysis",
 				)
 				self.assertEqual(self.call("get_card", card_id="no-such-card").source, "analysis")
@@ -270,5 +391,15 @@ class TestToolsPerPersona(ToolTestCase):
 		"""A tool added to the registry without a persona test fails here."""
 		from lending_assistant.assistant.tools import registry
 
-		exercised = {"get_screen_help", "check_my_access", "find_records", "get_record", "search_code", "read_code", "search_knowledge", "lookup_knowledge", "get_card"}
+		exercised = {
+			"get_screen_help",
+			"check_my_access",
+			"find_records",
+			"get_record",
+			"search_code",
+			"read_code",
+			"search_knowledge",
+			"lookup_knowledge",
+			"get_card",
+		}
 		self.assertEqual(set(registry.TOOLS), exercised)

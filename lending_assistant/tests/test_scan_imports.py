@@ -76,10 +76,19 @@ class TestImportAllowlist(AssistantTestCase):
 				self.assertHit(rel, "import socket  # AST-ALLOWED: needed\n", "network-import")
 
 	def test_network_import_is_a_hit_even_inside_a_function(self):
-		self.assertHit("assistant/tools/live.py", "def f():\n    import requests\n    return requests.get('x')\n", "network-import")
+		self.assertHit(
+			"assistant/tools/live.py",
+			"def f():\n    import requests\n    return requests.get('x')\n",
+			"network-import",
+		)
 
 	def test_anthropic_is_a_hit_everywhere_today_the_orchestrator_row_comes_in_m4b(self):
-		for rel in ("assistant/tools/live.py", "assistant/orchestrator.py", "api/chat.py", "assistant/guard.py"):
+		for rel in (
+			"assistant/tools/live.py",
+			"assistant/orchestrator.py",
+			"api/chat.py",
+			"assistant/guard.py",
+		):
 			for line in ("import anthropic", "from anthropic import Anthropic"):
 				with self.subTest(rel=rel, line=line):
 					self.assertHit(rel, f"{line}\n", "import", f"{line} in {rel}")
@@ -110,7 +119,9 @@ class TestImportAllowlist(AssistantTestCase):
 			("assistant/tools/live.py", "import subprocess"),
 		]:
 			with self.subTest(rel=rel, line=line):
-				self.assertHit(rel, f"{line}\n", "import" if "subprocess" not in line else "generic-exec", line)
+				self.assertHit(
+					rel, f"{line}\n", "import" if "subprocess" not in line else "generic-exec", line
+				)
 
 	def test_a_listed_import_in_its_own_file_is_clean(self):
 		for rel, line in [
@@ -158,7 +169,9 @@ class TestImportAllowlist(AssistantTestCase):
 			scanner.IMPORT_ALLOWLIST.append(("from", "os", "remove", ("assistant/tools/live.py",)))
 			scanner.IMPORT_ALLOWLIST.append(("from", "shutil", "move", ("assistant/tools/live.py",)))
 			hits = scanner.scan_python(
-				"assistant/tools/live.py", "from os import remove\nfrom shutil import move\n\ndef f(p):\n    remove(p)\n    move(p, p)\n", set()
+				"assistant/tools/live.py",
+				"from os import remove\nfrom shutil import move\n\ndef f(p):\n    remove(p)\n    move(p, p)\n",
+				set(),
 			)
 		finally:
 			sys.modules.pop("guard_scan_imports_test", None)
@@ -166,7 +179,12 @@ class TestImportAllowlist(AssistantTestCase):
 		self.assertEqual(len(hits), 2)
 
 	def test_relative_and_app_imports_are_unchanged(self):
-		self.assertClean("assistant/tools/live.py", "from lending_assistant.assistant import guard\n\ndef f():\n    return guard.MAX_ROWS\n".replace("guard.MAX_ROWS", "guard.read_doc"))
+		self.assertClean(
+			"assistant/tools/live.py",
+			"from lending_assistant.assistant import guard\n\ndef f():\n    return guard.MAX_ROWS\n".replace(
+				"guard.MAX_ROWS", "guard.read_doc"
+			),
+		)
 
 	def test_the_real_app_passes_and_the_rows_equal_the_imports_ast_finds(self):
 		scanner = load_scanner()

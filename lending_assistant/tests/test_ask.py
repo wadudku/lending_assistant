@@ -45,7 +45,9 @@ class TestAsk(AssistantTestCase):
 		self.assertEqual(set(result), {"conversation", "message", "answer"})
 		self.assertEqual(result["answer"], "Stub reply: the advisor isn't connected yet.")
 
-		self.assertEqual(len(frappe.get_list("Assistant Message", pluck="name", limit_page_length=0)), dev_before + 1)
+		self.assertEqual(
+			len(frappe.get_list("Assistant Message", pluck="name", limit_page_length=0)), dev_before + 1
+		)
 
 		frappe.set_user("Administrator")
 		message = frappe.get_doc("Assistant Message", result["message"])
@@ -56,7 +58,9 @@ class TestAsk(AssistantTestCase):
 		self.assertEqual(message.answer, result["answer"])
 		self.assertEqual(message.route, "Form/Loan/AST-LOAN-1")
 		self.assertEqual((message.route_doctype, message.route_docname), ("Loan", "AST-LOAN-1"))
-		self.assertEqual((message.depth, message.deep, message.status, message.model), ("Technical", 1, "ok", "stub"))
+		self.assertEqual(
+			(message.depth, message.deep, message.status, message.model), ("Technical", 1, "ok", "stub")
+		)
 		self.assertIn("Assistant User", frappe.parse_json(message.roles))
 		self.assertGreaterEqual(message.latency_ms, 0)
 
@@ -88,7 +92,9 @@ class TestAsk(AssistantTestCase):
 		before = self.counts()
 		self.as_user("dev")
 		for kwargs in bad_calls:
-			with self.assertRaises(frappe.ValidationError, msg=str({k: str(v)[:20] for k, v in kwargs.items()})):
+			with self.assertRaises(
+				frappe.ValidationError, msg=str({k: str(v)[:20] for k, v in kwargs.items()})
+			):
 				chat.ask(**kwargs)
 		frappe.set_user("Administrator")
 		self.assertEqual(self.counts(), before, "rejected calls must not write")
@@ -131,7 +137,9 @@ class TestAsk(AssistantTestCase):
 		self.assertIn(NOT_FOUND, error_text(other))
 		# the owner can still continue it
 		self.as_user("dev")
-		self.assertEqual(chat.ask("again", conversation=mine["conversation"])["conversation"], mine["conversation"])
+		self.assertEqual(
+			chat.ask("again", conversation=mine["conversation"])["conversation"], mine["conversation"]
+		)
 		frappe.set_user("Administrator")
 		self.assertEqual(frappe.get_doc("Assistant Conversation", mine["conversation"]).message_count, 2)
 
@@ -146,7 +154,9 @@ class TestAsk(AssistantTestCase):
 
 		frappe.set_user("ast-test-sysmgr@example.com")
 		# proof that the extra `user` filter is what protects it: plain permissions DO let this user read the row
-		visible = frappe.get_list("Assistant Conversation", filters={"name": mine["conversation"]}, pluck="name")
+		visible = frappe.get_list(
+			"Assistant Conversation", filters={"name": mine["conversation"]}, pluck="name"
+		)
 		self.assertEqual(visible, [mine["conversation"]])
 
 		with self.assertRaises(frappe.DoesNotExistError) as other:
@@ -162,7 +172,9 @@ class TestAsk(AssistantTestCase):
 		self.assertIn(NOT_FOUND, error_text(rate_other))
 
 		frappe.set_user("Administrator")
-		self.assertEqual(frappe.get_doc("Assistant Conversation", mine["conversation"]).message_count, count_before)
+		self.assertEqual(
+			frappe.get_doc("Assistant Conversation", mine["conversation"]).message_count, count_before
+		)
 		self.assertFalse(frappe.get_doc("Assistant Message", mine["message"]).feedback)
 
 		# but their own conversations work

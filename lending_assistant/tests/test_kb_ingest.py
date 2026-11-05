@@ -21,7 +21,9 @@ class TestIngest(AssistantTestCase):
 		self.addCleanup(fx.cleanup, os.path.dirname(self.source), self.out)
 
 	def run_ingest(self, **kw):
-		return ingest.run(self.source, dest=self.dest, img_dest=self.img, commit=kw.pop("commit", fx.COMMIT), **kw)
+		return ingest.run(
+			self.source, dest=self.dest, img_dest=self.img, commit=kw.pop("commit", fx.COMMIT), **kw
+		)
 
 	def test_copies_approved_cards_only(self):
 		result = self.run_ingest()
@@ -31,13 +33,17 @@ class TestIngest(AssistantTestCase):
 		self.assertFalse(os.path.exists(os.path.join(self.dest, "cards", "glossary", "glossary.draft.md")))
 		index = json.load(open(os.path.join(self.dest, "index.json")))
 		self.assertEqual(sorted(index["cards"]), ["glossary.term", "howto.a.b"])
-		self.assertEqual(index["by_term"]["term"], ["glossary.term"])  # the draft is filtered out of every map
+		self.assertEqual(
+			index["by_term"]["term"], ["glossary.term"]
+		)  # the draft is filtered out of every map
 		self.assertNotIn("glossary.draft", index["keywords"])
 
 	def test_refuses_a_card_file_that_is_not_approved(self):
 		fx.cleanup(self.source)
 		self.source = fx.make_source(draft_file_says_approved=False)
-		fx.rewrite_index(self.source, lambda ix: ix["cards"]["glossary.draft"].update(status="approved"))  # index says approved, file says draft
+		fx.rewrite_index(
+			self.source, lambda ix: ix["cards"]["glossary.draft"].update(status="approved")
+		)  # index says approved, file says draft
 		with self.assertRaises(ingest.IngestRefused) as caught:
 			self.run_ingest()
 		self.assertIn("glossary.draft", str(caught.exception))
@@ -47,7 +53,13 @@ class TestIngest(AssistantTestCase):
 	def test_refuses_a_version_mismatch_and_a_missing_file_and_a_missing_image(self):
 		for edit, word in (
 			(lambda ix: ix["cards"]["howto.a.b"].update(version=9), "version"),
-			(lambda ix: ix["cards"].__setitem__("glossary.ghost", {**ix["cards"]["glossary.term"], "path": "cards/glossary/glossary.ghost.md"}), "missing"),
+			(
+				lambda ix: ix["cards"].__setitem__(
+					"glossary.ghost",
+					{**ix["cards"]["glossary.term"], "path": "cards/glossary/glossary.ghost.md"},
+				),
+				"missing",
+			),
 		):
 			fx.cleanup(os.path.dirname(self.source))
 			self.source = fx.make_source()
@@ -66,7 +78,9 @@ class TestIngest(AssistantTestCase):
 
 	def test_second_run_is_idempotent(self):
 		first = self.run_ingest()
-		self.assertEqual((first["new"], first["changed"], first["removed"]), (5, 0, 0))  # 2 cards, index, manifest, 1 image
+		self.assertEqual(
+			(first["new"], first["changed"], first["removed"]), (5, 0, 0)
+		)  # 2 cards, index, manifest, 1 image
 		before = {**fx.tree_files(self.dest), **{"img/" + k: v for k, v in fx.tree_files(self.img).items()}}
 		second = self.run_ingest()
 		self.assertEqual((second["new"], second["changed"], second["removed"]), (0, 0, 0))
@@ -123,8 +137,13 @@ class TestIngest(AssistantTestCase):
 		self.assertFalse(os.path.exists(os.path.join(self.out, "evil.txt")))
 
 	def test_it_refuses_a_destination_that_is_not_the_app_folder_or_a_temp_folder(self):
-		for kw in ({"dest": os.path.join(ingest.PACKAGE_DIR, "public")}, {"img_dest": os.path.join(ingest.PACKAGE_DIR, "public")},
-			{"dest": "/etc"}, {"img_dest": os.path.expanduser("~")}, {"dest": ingest.PACKAGE_DIR}):
+		for kw in (
+			{"dest": os.path.join(ingest.PACKAGE_DIR, "public")},
+			{"img_dest": os.path.join(ingest.PACKAGE_DIR, "public")},
+			{"dest": "/etc"},
+			{"img_dest": os.path.expanduser("~")},
+			{"dest": ingest.PACKAGE_DIR},
+		):
 			with self.subTest(kw=kw):
 				args = {"dest": self.dest, "img_dest": self.img, **kw}
 				with self.assertRaises(ingest.IngestRefused):
@@ -135,9 +154,12 @@ class TestIngest(AssistantTestCase):
 	def test_it_deletes_only_files_that_match_the_card_and_image_patterns(self):
 		self.run_ingest()
 		keep = [
-			os.path.join(self.img, "someone_else", "keep.txt"), os.path.join(self.img, "top.txt"),
-			os.path.join(self.dest, "cards", "notes", "mine.md"), os.path.join(self.dest, "cards", "howto", "notes.txt"),
-			os.path.join(self.dest, "cards", "howto", "mine.md"), os.path.join(self.dest, "readme.md"),
+			os.path.join(self.img, "someone_else", "keep.txt"),
+			os.path.join(self.img, "top.txt"),
+			os.path.join(self.dest, "cards", "notes", "mine.md"),
+			os.path.join(self.dest, "cards", "howto", "notes.txt"),
+			os.path.join(self.dest, "cards", "howto", "mine.md"),
+			os.path.join(self.dest, "readme.md"),
 		]
 		for path in keep:
 			os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -174,7 +196,11 @@ class TestIngest(AssistantTestCase):
 		manifest = json.load(open(os.path.join(store.KB_ROOT, "ingest_manifest.json")))
 		self.assertEqual(manifest["counts"]["cards"], 941)
 		self.assertRegex(manifest["source_commit"], r"^[0-9a-f]{40}$")
-		on_disk = {name for kind in os.listdir(os.path.join(store.KB_ROOT, "cards")) for name in os.listdir(os.path.join(store.KB_ROOT, "cards", kind))}
+		on_disk = {
+			name
+			for kind in os.listdir(os.path.join(store.KB_ROOT, "cards"))
+			for name in os.listdir(os.path.join(store.KB_ROOT, "cards", kind))
+		}
 		self.assertEqual(len(on_disk), 941)
 		self.assertEqual(on_disk, {row["id"] + ".md" for row in manifest["cards"]})
 		for row in manifest["cards"]:
@@ -183,8 +209,13 @@ class TestIngest(AssistantTestCase):
 			self.assertIn(b"\nstatus: approved\n", data)
 		used = set()
 		for row in manifest["cards"]:
-			text = open(os.path.join(store.KB_ROOT, "cards", row["type"], row["id"] + ".md"), encoding="utf-8").read()
-			used.update(m.split("/kb_img/", 1)[1] for m in re.findall(r"/assets/lending_assistant/kb_img/[^)\s,\]]+", text))
+			text = open(
+				os.path.join(store.KB_ROOT, "cards", row["type"], row["id"] + ".md"), encoding="utf-8"
+			).read()
+			used.update(
+				m.split("/kb_img/", 1)[1]
+				for m in re.findall(r"/assets/lending_assistant/kb_img/[^)\s,\]]+", text)
+			)
 		img_root = os.path.join(os.path.dirname(os.path.dirname(store.KB_ROOT)), "public", "kb_img")
 		files = {f"{d}/{n}" for d in os.listdir(img_root) for n in os.listdir(os.path.join(img_root, d))}
 		self.assertEqual(files, used)

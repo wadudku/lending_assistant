@@ -13,9 +13,9 @@ COMMIT = "a" * 40
 def card_text(card_id, kind, title, status="approved", version=1, body="Body text.\n", images=(), extra=""):
 	images_line = "[" + ", ".join(images) + "]"
 	return (
-		f"---\nid: {card_id}\ntype: {kind}\ntitle: {title}\nsummary: \"Summary of {title}.\"\nbr_ids: []\nbrd_section: 7.7\n"
+		f'---\nid: {card_id}\ntype: {kind}\ntitle: {title}\nsummary: "Summary of {title}."\nbr_ids: []\nbrd_section: 7.7\n'
 		f"doctypes: [Loan Repayment]\ndev_items: []\nlending_version: 16.5.1\ncode_refs: []\nimages: {images_line}\n"
-		f"sources:\n  - \"sources/x.txt#1\"\nrelated: []\nversion: {version}\nstatus: {status}\n{extra}---\n{body}"
+		f'sources:\n  - "sources/x.txt#1"\nrelated: []\nversion: {version}\nstatus: {status}\n{extra}---\n{body}'
 	)
 
 
@@ -37,7 +37,15 @@ def make_source(root=None, draft_file_says_approved=False):
 		"glossary.draft": ("glossary", "Draft term", []),
 	}
 	index = {"schema": 1, "lending_version": "16.5.1", "cards": {}, "keywords": {}}
-	for name in ("by_doctype", "by_action", "by_br_id", "by_brd_section", "by_journey", "by_dev_item", "by_term"):
+	for name in (
+		"by_doctype",
+		"by_action",
+		"by_br_id",
+		"by_brd_section",
+		"by_journey",
+		"by_dev_item",
+		"by_term",
+	):
 		index[name] = {}
 	for cid, (kind, title, images) in cards.items():
 		draft = cid == "glossary.draft"

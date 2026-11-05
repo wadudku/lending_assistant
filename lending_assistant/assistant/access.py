@@ -41,7 +41,11 @@ def roles_that_can(doctype, action) -> dict:
 		raise frappe.ValidationError(f"Action must be one of: {', '.join(ACTIONS)}.")
 
 	roles, owner_only = set(), set()
-	for perm in frappe.get_meta(doctype).permissions:  # AST-ALLOWED: permission rows from the meta; only role names leave this module
+	for (
+		perm
+	) in frappe.get_meta(  # AST-ALLOWED: permission rows from the meta; only role names leave this module
+		doctype
+	).permissions:
 		if (perm.permlevel or 0) == 0 and perm.get(action):
 			(owner_only if perm.get("if_owner") else roles).add(perm.role)
 	return {
@@ -54,7 +58,17 @@ def roles_that_can(doctype, action) -> dict:
 
 
 LAYOUT_FIELDTYPES = frozenset(
-	{"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading", "Fold", "Image", "Table Break"}
+	{
+		"Section Break",
+		"Column Break",
+		"Tab Break",
+		"HTML",
+		"Button",
+		"Heading",
+		"Fold",
+		"Image",
+		"Table Break",
+	}
 )
 LINK_FIELDTYPES = ("Link", "Table", "Table MultiSelect")
 DESCRIPTION_CHARS = 160
@@ -76,7 +90,9 @@ def describe_doctype(doctype, search=None) -> dict:
 	if not guard.check_actions(doctype, ["read"])["read"]:
 		raise guard.AssistantRefused("You don't have permission to read that doctype.")
 
-	meta = frappe.get_meta(doctype)  # AST-ALLOWED: field labels and types for screen help; only plain text leaves this function
+	meta = frappe.get_meta(  # AST-ALLOWED: field labels and types for screen help; only plain text leaves this function
+		doctype
+	)
 	readable = set(guard.readable_fields(doctype))
 	allowed = {row.allowed_doctype for row in settings.get_settings().doctype_allowlist}
 	needle = search.strip().lower() if search else ""
@@ -97,7 +113,11 @@ def describe_doctype(doctype, search=None) -> dict:
 			}
 		)
 		if df.fieldtype in LINK_FIELDTYPES and df.options:
-			linked[df.options] = {"doctype": df.options, "via_field": df.fieldname, "on_allowlist": df.options in allowed}
+			linked[df.options] = {
+				"doctype": df.options,
+				"via_field": df.fieldname,
+				"on_allowlist": df.options in allowed,
+			}
 	return {
 		"doctype": doctype,
 		"module": meta.module,

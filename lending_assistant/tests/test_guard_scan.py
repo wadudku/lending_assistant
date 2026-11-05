@@ -80,24 +80,76 @@ BAD_TOOL = """
 VARIANTS = [
 	# the Reviewer's 20 (M2b review, "Static scan")
 	("rv01 from-import get_all", "db-read", "from frappe import get_all\n\ndef f():\n    get_all('Loan')\n"),
-	("rv02 from-import set_user", "user-switch", "from frappe import set_user\n\ndef f():\n    set_user('Administrator')\n"),
-	("rv03 from-import get_doc", "get-doc", "from frappe import get_doc\n\ndef f():\n    get_doc('Loan', 'x')\n"),
-	("rv04 from-import delete_doc", "write", "from frappe import delete_doc\n\ndef f():\n    delete_doc('Loan', 'x')\n"),
-	("rv05 frappe.get_value", "db-read", "import frappe\n\ndef f():\n    frappe.get_value('Loan', 'x', 'status')\n"),
+	(
+		"rv02 from-import set_user",
+		"user-switch",
+		"from frappe import set_user\n\ndef f():\n    set_user('Administrator')\n",
+	),
+	(
+		"rv03 from-import get_doc",
+		"get-doc",
+		"from frappe import get_doc\n\ndef f():\n    get_doc('Loan', 'x')\n",
+	),
+	(
+		"rv04 from-import delete_doc",
+		"write",
+		"from frappe import delete_doc\n\ndef f():\n    delete_doc('Loan', 'x')\n",
+	),
+	(
+		"rv05 frappe.get_value",
+		"db-read",
+		"import frappe\n\ndef f():\n    frappe.get_value('Loan', 'x', 'status')\n",
+	),
 	("rv06 qb select", "qb", "import frappe\n\ndef f():\n    frappe.qb.from_('Loan').select('*').run()\n"),
 	("rv07 qb update", "qb", "import frappe\n\ndef f():\n    frappe.qb.update('Loan').set('x', 1).run()\n"),
-	("rv08 session subscript", "user-switch", "import frappe\n\ndef f():\n    frappe.session['user'] = 'Administrator'\n"),
-	("rv09 local.session.update", "user-switch", "import frappe\n\ndef f():\n    frappe.local.session.update({'user': 'Administrator'})\n"),
-	("rv10 db.add_index", "db-other", "import frappe\n\ndef f():\n    frappe.db.add_index('Loan', ['status'])\n"),
+	(
+		"rv08 session subscript",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.session['user'] = 'Administrator'\n",
+	),
+	(
+		"rv09 local.session.update",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.local.session.update({'user': 'Administrator'})\n",
+	),
+	(
+		"rv10 db.add_index",
+		"db-other",
+		"import frappe\n\ndef f():\n    frappe.db.add_index('Loan', ['status'])\n",
+	),
 	("rv11 db.create_table", "db-other", "import frappe\n\ndef f():\n    frappe.db.create_table('Loan')\n"),
 	("rv12 db.set_default", "db-other", "import frappe\n\ndef f():\n    frappe.db.set_default('k', 'v')\n"),
-	("rv13 getattr on db", "dynamic", "import frappe\n\ndef f():\n    getattr(frappe.db, 'sql')('select 1')\n"),
-	("rv14 alias then call", "alias", "import frappe\n\ndef f():\n    d = frappe.db\n    d.sql('select 1')\n"),
+	(
+		"rv13 getattr on db",
+		"dynamic",
+		"import frappe\n\ndef f():\n    getattr(frappe.db, 'sql')('select 1')\n",
+	),
+	(
+		"rv14 alias then call",
+		"alias",
+		"import frappe\n\ndef f():\n    d = frappe.db\n    d.sql('select 1')\n",
+	),
 	("rv15 importlib", "generic-exec", "import importlib\n\ndef f():\n    importlib.import_module('os')\n"),
-	("rv16 sendmail", "side-effect", "import frappe\n\ndef f():\n    frappe.sendmail(recipients=['a@b.c'], message='x')\n"),
-	("rv17 background_jobs.enqueue", "side-effect", "import frappe\n\ndef f():\n    frappe.utils.background_jobs.enqueue('frappe.ping')\n"),
-	("rv18 frappe.client.get", "client-api", "import frappe\n\ndef f():\n    frappe.client.get('Loan', 'x')\n"),
-	("rv19 frappe.client.get_list", "client-api", "import frappe\n\ndef f():\n    frappe.client.get_list('Loan')\n"),
+	(
+		"rv16 sendmail",
+		"side-effect",
+		"import frappe\n\ndef f():\n    frappe.sendmail(recipients=['a@b.c'], message='x')\n",
+	),
+	(
+		"rv17 background_jobs.enqueue",
+		"side-effect",
+		"import frappe\n\ndef f():\n    frappe.utils.background_jobs.enqueue('frappe.ping')\n",
+	),
+	(
+		"rv18 frappe.client.get",
+		"client-api",
+		"import frappe\n\ndef f():\n    frappe.client.get('Loan', 'x')\n",
+	),
+	(
+		"rv19 frappe.client.get_list",
+		"client-api",
+		"import frappe\n\ndef f():\n    frappe.client.get_list('Loan')\n",
+	),
 	("rv20 reportview.get", "client-api", "import frappe\n\ndef f():\n    frappe.desk.reportview.get()\n"),
 	# (a) imports and later bare calls
 	("a1 from-import qb", "qb", "from frappe import qb\n"),
@@ -105,8 +157,16 @@ VARIANTS = [
 	("a3 db alias call", "db-read", "from frappe import db\n\ndef f():\n    db.sql('select 1')\n"),
 	("a4 import frappe.db as d", "alias", "import frappe.db as d\n"),
 	("a5 import frappe.qb as q", "qb", "import frappe.qb as q\n"),
-	("a6 from-import enqueue", "side-effect", "from frappe import enqueue\n\ndef f():\n    enqueue('frappe.ping')\n"),
-	("a7 from background_jobs import enqueue", "side-effect", "from frappe.utils.background_jobs import enqueue\n"),
+	(
+		"a6 from-import enqueue",
+		"side-effect",
+		"from frappe import enqueue\n\ndef f():\n    enqueue('frappe.ping')\n",
+	),
+	(
+		"a7 from background_jobs import enqueue",
+		"side-effect",
+		"from frappe.utils.background_jobs import enqueue\n",
+	),
 	("a8 from-import sendmail", "side-effect", "from frappe import sendmail\n"),
 	("a9 from-import get_value", "db-read", "from frappe import get_value\n"),
 	("a10 from-import rename_doc", "write", "from frappe import rename_doc\n"),
@@ -120,43 +180,127 @@ VARIANTS = [
 	("a18 from frappe.desk import reportview", "client-api", "from frappe.desk import reportview\n"),
 	("a19 from frappe import client", "client-api", "from frappe import client\n"),
 	# (b) banned frappe APIs
-	("b1 frappe.get_single_value", "db-read", "import frappe\n\ndef f():\n    frappe.get_single_value('System Settings', 'x')\n"),
-	("b2 db.get_single_value", "db-read", "import frappe\n\ndef f():\n    frappe.db.get_single_value('System Settings', 'x')\n"),
-	("b3 db.exists outside install.py", "db-read", "import frappe\n\ndef f():\n    frappe.db.exists('Loan', 'x')\n"),
+	(
+		"b1 frappe.get_single_value",
+		"db-read",
+		"import frappe\n\ndef f():\n    frappe.get_single_value('System Settings', 'x')\n",
+	),
+	(
+		"b2 db.get_single_value",
+		"db-read",
+		"import frappe\n\ndef f():\n    frappe.db.get_single_value('System Settings', 'x')\n",
+	),
+	(
+		"b3 db.exists outside install.py",
+		"db-read",
+		"import frappe\n\ndef f():\n    frappe.db.exists('Loan', 'x')\n",
+	),
 	("b4 db.delete", "write", "import frappe\n\ndef f():\n    frappe.db.delete('Loan', {})\n"),
 	("b5 db.bulk_insert", "write", "import frappe\n\ndef f():\n    frappe.db.bulk_insert('Loan', [], [])\n"),
-	("b6 db.set_single_value", "write", "import frappe\n\ndef f():\n    frappe.db.set_single_value('System Settings', 'x', 1)\n"),
-	("b7 db.multisql", "db-read", "import frappe\n\ndef f():\n    frappe.db.multisql({'mariadb': 'select 1'})\n"),
+	(
+		"b6 db.set_single_value",
+		"write",
+		"import frappe\n\ndef f():\n    frappe.db.set_single_value('System Settings', 'x', 1)\n",
+	),
+	(
+		"b7 db.multisql",
+		"db-read",
+		"import frappe\n\ndef f():\n    frappe.db.multisql({'mariadb': 'select 1'})\n",
+	),
 	("b8 qb as a value", "qb", "import frappe\n\ndef f():\n    return frappe.qb\n"),
 	("b9 frappe.local.db.sql", "db-read", "import frappe\n\ndef f():\n    frappe.local.db.sql('select 1')\n"),
 	# (c) identity, every assignment shape
-	("c1 assign session.user", "user-switch", "import frappe\n\ndef f():\n    frappe.session.user = 'Administrator'\n"),
-	("c2 assign local.user", "user-switch", "import frappe\n\ndef f():\n    frappe.local.user = 'Administrator'\n"),
+	(
+		"c1 assign session.user",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.session.user = 'Administrator'\n",
+	),
+	(
+		"c2 assign local.user",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.local.user = 'Administrator'\n",
+	),
 	("c3 augmented assign", "user-switch", "import frappe\n\ndef f():\n    frappe.session.user += 'x'\n"),
-	("c4 annotated assign", "user-switch", "import frappe\n\ndef f():\n    frappe.session.user: str = 'Administrator'\n"),
-	("c5 tuple assign", "user-switch", "import frappe\n\ndef f():\n    frappe.session.user, x = 'Administrator', 1\n"),
-	("c6 local.session subscript", "user-switch", "import frappe\n\ndef f():\n    frappe.local.session['user'] = 'Administrator'\n"),
-	("c7 session.update", "user-switch", "import frappe\n\ndef f():\n    frappe.session.update({'user': 'Administrator'})\n"),
-	("c8 session.setdefault", "user-switch", "import frappe\n\ndef f():\n    frappe.session.setdefault('user', 'Administrator')\n"),
+	(
+		"c4 annotated assign",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.session.user: str = 'Administrator'\n",
+	),
+	(
+		"c5 tuple assign",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.session.user, x = 'Administrator', 1\n",
+	),
+	(
+		"c6 local.session subscript",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.local.session['user'] = 'Administrator'\n",
+	),
+	(
+		"c7 session.update",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.session.update({'user': 'Administrator'})\n",
+	),
+	(
+		"c8 session.setdefault",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.session.setdefault('user', 'Administrator')\n",
+	),
 	("c9 session.pop", "user-switch", "import frappe\n\ndef f():\n    frappe.session.pop('user')\n"),
-	("c10 local.session.clear", "user-switch", "import frappe\n\ndef f():\n    frappe.local.session.clear()\n"),
-	("c11 flags.ignore_permissions", "user-switch", "import frappe\n\ndef f():\n    frappe.flags.ignore_permissions = True\n"),
-	("c12 flags subscript", "user-switch", "import frappe\n\ndef f():\n    frappe.flags['ignore_permissions'] = True\n"),
-	("c13 local.flags.ignore_permissions", "user-switch", "import frappe\n\ndef f():\n    frappe.local.flags.ignore_permissions = True\n"),
+	(
+		"c10 local.session.clear",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.local.session.clear()\n",
+	),
+	(
+		"c11 flags.ignore_permissions",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.flags.ignore_permissions = True\n",
+	),
+	(
+		"c12 flags subscript",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.flags['ignore_permissions'] = True\n",
+	),
+	(
+		"c13 local.flags.ignore_permissions",
+		"user-switch",
+		"import frappe\n\ndef f():\n    frappe.local.flags.ignore_permissions = True\n",
+	),
 	("c14 del session key", "user-switch", "import frappe\n\ndef f():\n    del frappe.session['user']\n"),
-	("c15 alias then write", "user-switch", "import frappe\n\ndef f():\n    s = frappe.local.session\n    s['user'] = 'Administrator'\n"),
+	(
+		"c15 alias then write",
+		"user-switch",
+		"import frappe\n\ndef f():\n    s = frappe.local.session\n    s['user'] = 'Administrator'\n",
+	),
 	("c16 rebind frappe.local", "user-switch", "import frappe\n\ndef f():\n    frappe.local = None\n"),
 	# (d) frappe.db is denied by default
-	("d1 db.sql_ddl", "db-read", "import frappe\n\ndef f():\n    frappe.db.sql_ddl('create table x (a int)')\n"),
+	(
+		"d1 db.sql_ddl",
+		"db-read",
+		"import frappe\n\ndef f():\n    frappe.db.sql_ddl('create table x (a int)')\n",
+	),
 	("d2 db.commit", "db-other", "import frappe\n\ndef f():\n    frappe.db.commit()\n"),
 	("d3 db.begin", "db-other", "import frappe\n\ndef f():\n    frappe.db.begin()\n"),
 	("d4 db.truncate", "write", "import frappe\n\ndef f():\n    frappe.db.truncate('Loan')\n"),
 	("d5 db.add_unique", "db-other", "import frappe\n\ndef f():\n    frappe.db.add_unique('Loan', ['x'])\n"),
-	("d6 db.change_column_type", "db-other", "import frappe\n\ndef f():\n    frappe.db.change_column_type('Loan', 'x', 'text')\n"),
+	(
+		"d6 db.change_column_type",
+		"db-other",
+		"import frappe\n\ndef f():\n    frappe.db.change_column_type('Loan', 'x', 'text')\n",
+	),
 	("d7 db.get_global", "db-other", "import frappe\n\ndef f():\n    frappe.db.get_global('x')\n"),
 	("d8 db.rollback unmarked", "txn-control", "import frappe\n\ndef f():\n    frappe.db.rollback()\n"),
-	("d9 db.after_commit.add", "callbacks", "import frappe\n\ndef f():\n    frappe.db.after_commit.add(print)\n"),
-	("d10 db.before_commit.add", "callbacks", "import frappe\n\ndef f():\n    frappe.db.before_commit.add(print)\n"),
+	(
+		"d9 db.after_commit.add",
+		"callbacks",
+		"import frappe\n\ndef f():\n    frappe.db.after_commit.add(print)\n",
+	),
+	(
+		"d10 db.before_commit.add",
+		"callbacks",
+		"import frappe\n\ndef f():\n    frappe.db.before_commit.add(print)\n",
+	),
 	("d11 callback queue", "callbacks", "def f(manager):\n    manager._functions.clear()\n"),
 	# (e) dynamic access and side effects
 	("e1 getattr", "dynamic", "def f(x):\n    return getattr(x, 'sql')\n"),
@@ -168,22 +312,46 @@ VARIANTS = [
 	("e7 attrgetter", "dynamic", "import operator\n\ndef f():\n    return operator.attrgetter('db.sql')\n"),
 	("e8 sys.modules", "dynamic", "import sys\n\ndef f():\n    return sys.modules['frappe']\n"),
 	("e9 enqueue", "side-effect", "import frappe\n\ndef f():\n    frappe.enqueue('frappe.ping')\n"),
-	("e10 enqueue after commit", "side-effect", "import frappe\n\ndef f():\n    frappe.enqueue('frappe.ping', enqueue_after_commit=True)\n"),
-	("e11 enqueue_doc", "side-effect", "import frappe\n\ndef f():\n    frappe.enqueue_doc('Loan', 'x', 'm')\n"),
+	(
+		"e10 enqueue after commit",
+		"side-effect",
+		"import frappe\n\ndef f():\n    frappe.enqueue('frappe.ping', enqueue_after_commit=True)\n",
+	),
+	(
+		"e11 enqueue_doc",
+		"side-effect",
+		"import frappe\n\ndef f():\n    frappe.enqueue_doc('Loan', 'x', 'm')\n",
+	),
 	("e12 enqueue on a doc", "side-effect", "def f(doc):\n    doc.queue_action('submit')\n"),
-	("e13 publish_realtime", "side-effect", "import frappe\n\ndef f():\n    frappe.publish_realtime('x', {})\n"),
+	(
+		"e13 publish_realtime",
+		"side-effect",
+		"import frappe\n\ndef f():\n    frappe.publish_realtime('x', {})\n",
+	),
 	("e14 frappe.call", "generic-exec", "import frappe\n\ndef f():\n    frappe.call('frappe.ping')\n"),
-	("e15 frappe.get_attr", "generic-exec", "import frappe\n\ndef f():\n    frappe.get_attr('frappe.ping')\n"),
+	(
+		"e15 frappe.get_attr",
+		"generic-exec",
+		"import frappe\n\ndef f():\n    frappe.get_attr('frappe.ping')\n",
+	),
 	("e16 subprocess", "generic-exec", "import subprocess\n\ndef f():\n    subprocess.run(['ls'])\n"),
 	("e17 os.system", "generic-exec", "import os\n\ndef f():\n    os.system('ls')\n"),
 	("e18 os.popen", "generic-exec", "import os\n\ndef f():\n    os.popen('ls')\n"),
 	("e19 eval", "generic-exec", "def f():\n    eval('1')\n"),
 	("e20 exec", "generic-exec", "def f():\n    exec('x = 1')\n"),
 	("e21 compile", "generic-exec", "def f():\n    compile('1', 'f', 'eval')\n"),
-	("e23 builtins.getattr", "generic-exec", "import builtins\n\ndef f(x):\n    return builtins.getattr(x, 'sql')\n"),
+	(
+		"e23 builtins.getattr",
+		"generic-exec",
+		"import builtins\n\ndef f(x):\n    return builtins.getattr(x, 'sql')\n",
+	),
 	("e24 runpy", "generic-exec", "import runpy\n\ndef f():\n    runpy.run_path('x.py')\n"),
 	("e25 ctypes", "generic-exec", "import ctypes\n"),
-	("e22 safe_eval", "generic-exec", "import frappe\n\ndef f():\n    frappe.utils.safe_exec.safe_eval('1')\n"),
+	(
+		"e22 safe_eval",
+		"generic-exec",
+		"import frappe\n\ndef f():\n    frappe.utils.safe_exec.safe_eval('1')\n",
+	),
 	# (f) aliases of the four objects
 	("f1 d = frappe.db", "alias", "import frappe\n\nd = frappe.db\n"),
 	("f2 q = frappe.qb", "qb", "import frappe\n\nq = frappe.qb\n"),
@@ -266,7 +434,17 @@ CLEAN_FORMS = {
 	""",
 }
 
-EXPECTED_RULES = ("get-list", "db-read", "get-doc", "ignore-permissions", "user-switch", "write", "txn-control", "generic-exec", "file-access")
+EXPECTED_RULES = (
+	"get-list",
+	"db-read",
+	"get-doc",
+	"ignore-permissions",
+	"user-switch",
+	"write",
+	"txn-control",
+	"generic-exec",
+	"file-access",
+)
 
 
 class TestGuardScan(AssistantTestCase):
@@ -326,12 +504,27 @@ class TestGuardScan(AssistantTestCase):
 		result = run("--root", root)
 		self.assertEqual(result.returncode, 1, result.stdout)
 		out = result.stdout
-		for rule in EXPECTED_RULES + ("whitelist", "guest", "js-html"):
+		for rule in (*EXPECTED_RULES, "whitelist", "guest", "js-html"):
 			self.assertIn(f"[{rule}]", out, rule)
 		for text in (
-			"frappe.get_all()", "frappe.db.sql()", "frappe.db.get_value()", "frappe.db.count()", "frappe.set_user()", ".insert()", ".save()",
-			".submit()", ".cancel()", ".delete()", "frappe.delete_doc()", "frappe.db.set_value()", "frappe.rename_doc()", "frappe.db.commit()",
-			"eval()", "open()", ".read_text()", "ignore_permissions",
+			"frappe.get_all()",
+			"frappe.db.sql()",
+			"frappe.db.get_value()",
+			"frappe.db.count()",
+			"frappe.set_user()",
+			".insert()",
+			".save()",
+			".submit()",
+			".cancel()",
+			".delete()",
+			"frappe.delete_doc()",
+			"frappe.db.set_value()",
+			"frappe.rename_doc()",
+			"frappe.db.commit()",
+			"eval()",
+			"open()",
+			".read_text()",
+			"ignore_permissions",
 		):
 			self.assertIn(text, out, text)
 		# the M2a-R3 case: an unmarked db.exists in install.py is flagged
@@ -386,20 +579,42 @@ class TestGuardScan(AssistantTestCase):
 		self.assertClean({"assistant/guard.py": marked}, "marked, in guard.py")
 		self.assertFlagged("marked entry in the wrong file", "not-allowed", marked, "assistant/access.py")
 		self.assertFlagged("marked entry in a tool", "not-allowed", marked)
-		self.assertFlagged("a marker without a reason", "not-allowed", code.replace("')\n", "')  # AST-ALLOWED:\n"), "assistant/guard.py")
+		self.assertFlagged(
+			"a marker without a reason",
+			"not-allowed",
+			code.replace("')\n", "')  # AST-ALLOWED:\n"),
+			"assistant/guard.py",
+		)
 
 	def test_B_each_file_restricted_entry_works_only_in_its_files(self):
 		restricted = {
-			"has_permission": ("import frappe\nimport frappe.permissions\n\ndef f():\n    return frappe.permissions.has_permission('Loan', 'read')\n", ("assistant/guard.py",)),
-			"cache": ("import frappe\n\ndef f():\n    return frappe.cache.make_key('k')\n", ("assistant/ratelimit.py",)),
-			"request_ip": ("import frappe\n\ndef f():\n    return frappe.local.request_ip\n", ("api/chat.py",)),
-			"bench_path": ("import frappe\n\ndef f():\n    return frappe.utils.get_bench_path()\n", ("assistant/codereader.py",)),
-			"whitelist": ("import frappe\n\n@frappe.whitelist(methods=['POST'])\ndef ask():\n    return 1\n", ("api/chat.py",)),
+			"has_permission": (
+				"import frappe\nimport frappe.permissions\n\ndef f():\n    return frappe.permissions.has_permission('Loan', 'read')\n",
+				("assistant/guard.py",),
+			),
+			"cache": (
+				"import frappe\n\ndef f():\n    return frappe.cache.make_key('k')\n",
+				("assistant/ratelimit.py",),
+			),
+			"request_ip": (
+				"import frappe\n\ndef f():\n    return frappe.local.request_ip\n",
+				("api/chat.py",),
+			),
+			"bench_path": (
+				"import frappe\n\ndef f():\n    return frappe.utils.get_bench_path()\n",
+				("assistant/codereader.py",),
+			),
+			"whitelist": (
+				"import frappe\n\n@frappe.whitelist(methods=['POST'])\ndef ask():\n    return 1\n",
+				("api/chat.py",),
+			),
 		}
 		for name, (code, ok_files) in restricted.items():
 			for rel in ok_files:
 				self.assertClean({rel: code}, f"{name} in {rel}")
-			self.assertFlagged(f"{name} in a tool", "not-allowed" if name != "whitelist" else "whitelist", code)
+			self.assertFlagged(
+				f"{name} in a tool", "not-allowed" if name != "whitelist" else "whitelist", code
+			)
 
 	def test_C_imports_are_allowlisted(self):
 		bad = {
@@ -424,34 +639,70 @@ class TestGuardScan(AssistantTestCase):
 		self.assertFlagged("now_datetime as n", "alias", "from frappe.utils import now_datetime as n\n")
 		# an entry that is allowed only in some files
 		self.assertFlagged("import frappe.permissions in a tool", "import", "import frappe.permissions\n")
-		self.assertFlagged("get_permitted_fields in access.py", "import", "from frappe.model import get_permitted_fields\n", "assistant/access.py")
-		self.assertFlagged("a marker never excuses an import", "import", "from frappe import throw  # AST-ALLOWED: because\n", "assistant/guard.py")
+		self.assertFlagged(
+			"get_permitted_fields in access.py",
+			"import",
+			"from frappe.model import get_permitted_fields\n",
+			"assistant/access.py",
+		)
+		self.assertFlagged(
+			"a marker never excuses an import",
+			"import",
+			"from frappe import throw  # AST-ALLOWED: because\n",
+			"assistant/guard.py",
+		)
 
 	def test_C_doctype_controllers_may_import_document_as_a_class_base_only(self):
 		base = "from frappe.model.document import Document\n\n\nclass Thing(Document):\n    pass\n"
 		self.assertClean({"lending_assistant/doctype/thing/thing.py": base}, "controller")
 		self.assertClean({"other/doctype/thing/thing.py": base}, "any doctype folder")
 		self.assertFlagged("Document in a tool", "import", base, "assistant/tools/thing.py")
-		called = "from frappe.model.document import Document\n\n\ndef f():\n    return Document('Loan', 'x')\n"
-		self.assertFlagged("Document(...) in a controller", "not-allowed", called, "lending_assistant/doctype/thing/thing.py")
+		called = (
+			"from frappe.model.document import Document\n\n\ndef f():\n    return Document('Loan', 'x')\n"
+		)
+		self.assertFlagged(
+			"Document(...) in a controller", "not-allowed", called, "lending_assistant/doctype/thing/thing.py"
+		)
 		value = "from frappe.model.document import Document\n\nx = Document\n"
-		self.assertFlagged("Document as a value", "not-allowed", value, "lending_assistant/doctype/thing/thing.py")
+		self.assertFlagged(
+			"Document as a value", "not-allowed", value, "lending_assistant/doctype/thing/thing.py"
+		)
 
 	def test_D_method_names_are_banned_whatever_the_receiver(self):
 		for method, rule in METHODS:
 			with self.subTest(method):
 				self.assertFlagged(method, rule, f"def f(x):\n    return x.{method}()\n")
-		self.assertFlagged("run on a query builder", "qb", "def f(q):\n    return q.from_('x').select('y').run()\n")
+		self.assertFlagged(
+			"run on a query builder", "qb", "def f(q):\n    return q.from_('x').select('y').run()\n"
+		)
 		self.assertFlagged("run on a query", "qb", "def f(query):\n    return query.run()\n")
-		self.assertClean({"assistant/tools/plain.py": "def f(t):\n    return t.run()\n"}, "run on something that is not a query")
+		self.assertClean(
+			{"assistant/tools/plain.py": "def f(t):\n    return t.run()\n"},
+			"run on something that is not a query",
+		)
 
 	def test_D_a_marker_excuses_a_method_only_in_the_file_that_may_use_it(self):
 		self.assertClean({"assistant/audit.py": "def f(doc):\n    doc.insert()  # AST-ALLOWED: own log\n"})
-		self.assertFlagged("insert marked in a tool", "write", "def f(doc):\n    doc.insert()  # AST-ALLOWED: please\n")
-		self.assertFlagged("get_password marked in a tool", "secrets", "def f(doc):\n    doc.get_password('k')  # AST-ALLOWED: please\n")
-		self.assertClean({"assistant/settings.py": "def f(doc):\n    return doc.get_password('k')  # AST-ALLOWED: the one key reader\n"})
+		self.assertFlagged(
+			"insert marked in a tool", "write", "def f(doc):\n    doc.insert()  # AST-ALLOWED: please\n"
+		)
+		self.assertFlagged(
+			"get_password marked in a tool",
+			"secrets",
+			"def f(doc):\n    doc.get_password('k')  # AST-ALLOWED: please\n",
+		)
+		self.assertClean(
+			{
+				"assistant/settings.py": "def f(doc):\n    return doc.get_password('k')  # AST-ALLOWED: the one key reader\n"
+			}
+		)
 		for method in ("connect", "init", "login_as", "set_user"):
-			self.assertFlagged(f"{method} marked in guard.py", "identity-call", f"def f(x):\n    x.{method}()  # AST-ALLOWED: please\n", "assistant/guard.py")
+			self.assertFlagged(
+				f"{method} marked in guard.py",
+				"identity-call",
+				f"def f(x):\n    x.{method}()  # AST-ALLOWED: please\n",
+				"assistant/guard.py",
+			)
 
 	def test_E_dunders_and_builtins(self):
 		for name in DUNDER_NAMES:
@@ -474,8 +725,14 @@ class TestGuardScan(AssistantTestCase):
 			("from inspect import currentframe", "from inspect import currentframe\n"),
 		):
 			with self.subTest(name):
-				self.assertFlagged(name, "dynamic" if name in ("f_globals", "f_back", "tb_frame") else "generic-exec", code)
-		self.assertFlagged("sys._getframe is dynamic access too", "generic-exec", "import sys\n\ndef f():\n    return sys._getframe(1)\n")
+				self.assertFlagged(
+					name, "dynamic" if name in ("f_globals", "f_back", "tb_frame") else "generic-exec", code
+				)
+		self.assertFlagged(
+			"sys._getframe is dynamic access too",
+			"generic-exec",
+			"import sys\n\ndef f():\n    return sys._getframe(1)\n",
+		)
 
 	def test_F_secrets_are_hits_outside_install(self):
 		for code in (
@@ -492,7 +749,12 @@ class TestGuardScan(AssistantTestCase):
 		):
 			with self.subTest(code):
 				self.assertFlagged("secret", "secrets", code)
-				self.assertFlagged("secret marked in guard.py", "secrets", code + "# AST-ALLOWED: please\n", "assistant/guard.py")
+				self.assertFlagged(
+					"secret marked in guard.py",
+					"secrets",
+					code + "# AST-ALLOWED: please\n",
+					"assistant/guard.py",
+				)
 		marked = "import frappe\n\ndef f():\n    return frappe.conf.site_name  # AST-ALLOWED: install reads the site name\n"
 		self.assertClean({"install.py": marked}, "install.py")
 		self.assertFlagged("marked outside install.py", "secrets", marked, "assistant/guard.py")
@@ -501,12 +763,20 @@ class TestGuardScan(AssistantTestCase):
 		for name, code in FLAGS:
 			with self.subTest(name):
 				self.assertFlagged(name, "flags", code)
-				marked_elsewhere = "\n".join(line + "  # AST-ALLOWED: please" if line.startswith("    ") else line for line in code.splitlines()) + "\n"
+				marked_elsewhere = (
+					"\n".join(
+						line + "  # AST-ALLOWED: please" if line.startswith("    ") else line
+						for line in code.splitlines()
+					)
+					+ "\n"
+				)
 				self.assertFlagged(name + ", marked in a tool", "flags", marked_elsewhere)
 
 	def test_a_new_allowlist_entry_is_needed_before_new_code_can_use_a_chain(self):
 		"""The burden is reversed: unknown chains are hits, so new code needs an entry (and a review)."""
-		self.assertFlagged("fresh chain", "not-allowed", "import frappe\n\ndef f():\n    return frappe.get_hooks('x')\n")
+		self.assertFlagged(
+			"fresh chain", "not-allowed", "import frappe\n\ndef f():\n    return frappe.get_hooks('x')\n"
+		)
 
 	def test_the_allowlist_has_no_dead_entries(self):
 		spec = importlib.util.spec_from_file_location("guard_scan_for_test", SCRIPT)
@@ -522,7 +792,11 @@ class TestGuardScan(AssistantTestCase):
 		self.assertGreater(len(module.ENTRIES), 20)
 
 	def test_a_dead_entry_and_a_stale_marker_are_reported(self):
-		root = self.make_tree({"assistant/x.py": "import frappe\n\ndef f():\n    return 1  # AST-ALLOWED: nothing here needs it\n"})
+		root = self.make_tree(
+			{
+				"assistant/x.py": "import frappe\n\ndef f():\n    return 1  # AST-ALLOWED: nothing here needs it\n"
+			}
+		)
 		result = run("--root", root, "--check-allowlist")
 		self.assertEqual(result.returncode, 1)
 		self.assertIn("dead entry", result.stdout)

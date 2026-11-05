@@ -32,7 +32,9 @@ class TestVerbatimAudit(AssistantTestCase):
 			cards_used=[{"id": "<i>c</i>", "version": 1}],
 			web_sources=["https://example.com/?a=<b>"],
 		)
-		message = audit.log_exchange(conversation, question=padded, answer=XSS_ANSWER, route=XSS_ROUTE, **json_fields)
+		message = audit.log_exchange(
+			conversation, question=padded, answer=XSS_ANSWER, route=XSS_ROUTE, **json_fields
+		)
 		chat.feedback(message, "down", XSS_COMMENT)
 
 		frappe.set_user("Administrator")
@@ -69,8 +71,16 @@ class TestVerbatimAudit(AssistantTestCase):
 		"""The verbatim fields must not be list/filter/title/search fields (#36b)."""
 		verbatim = {
 			"Assistant Message": [
-				"question", "answer", "route", "feedback_comment", "roles", "tool_calls",
-				"records_read", "code_files_read", "cards_used", "web_sources",
+				"question",
+				"answer",
+				"route",
+				"feedback_comment",
+				"roles",
+				"tool_calls",
+				"records_read",
+				"code_files_read",
+				"cards_used",
+				"web_sources",
 			],
 			"Assistant Conversation": ["first_route"],
 		}
@@ -126,7 +136,9 @@ class TestCounters(AssistantTestCase):
 			for _ in range(10):
 				with self.assertRaises(frappe.PermissionError):
 					chat.ask("burst")
-			self.assertFalse(frappe.cache.get(ratelimit.key_for(ratelimit.IP_PREFIX, TEST_IP, chat.IP_WINDOW)))
+			self.assertFalse(
+				frappe.cache.get(ratelimit.key_for(ratelimit.IP_PREFIX, TEST_IP, chat.IP_WINDOW))
+			)
 
 			self.as_user("dev")
 			chat.ask("first")
@@ -241,7 +253,9 @@ class TestSettingsSeeds(AssistantTestCase):
 		self.assertEqual(
 			meta.get_field("default_effort").options.split("\n"), ["low", "medium", "high", "xhigh", "max"]
 		)
-		self.assertEqual(meta.get_field("deep_effort").options.split("\n"), ["low", "medium", "high", "xhigh", "max"])
+		self.assertEqual(
+			meta.get_field("deep_effort").options.split("\n"), ["low", "medium", "high", "xhigh", "max"]
+		)
 
 	def test_never_send_seed(self):
 		self.assertEqual(len(install.DEFAULT_NEVER_SEND), 15)
@@ -251,7 +265,9 @@ class TestSettingsSeeds(AssistantTestCase):
 
 		result = install.seed_defaults()
 		self.assertEqual(len(result["added_never_send"]) + len(result["skipped_never_send"]), 15)
-		self.assertEqual(result["skipped_never_send"], [], "every field in #33 exists on 16.5.1 / erpnext 16.35")
+		self.assertEqual(
+			result["skipped_never_send"], [], "every field in #33 exists on 16.5.1 / erpnext 16.35"
+		)
 		rows = [(r.ref_doctype, r.fieldname) for r in frappe.get_doc("Assistant Settings").never_send_fields]
 		self.assertEqual(rows, install.DEFAULT_NEVER_SEND)
 

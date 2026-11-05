@@ -24,7 +24,9 @@ DEPTHS = ("Business", "Technical", "Both")
 FEEDBACK_VALUES = ("up", "down")
 DEFAULT_LIMIT = 30
 DEFAULT_WINDOW = 3600
-IP_LIMIT = 120  # ask, per client IP per IP_WINDOW. Module constants on purpose (DECISIONS #36); tests patch them
+IP_LIMIT = (
+	120  # ask, per client IP per IP_WINDOW. Module constants on purpose (DECISIONS #36); tests patch them
+)
 IP_WINDOW = 3600
 FEEDBACK_LIMIT = 60  # feedback, per user per window (own bucket, DECISIONS #28)
 
@@ -45,7 +47,9 @@ def ask(question=None, conversation=None, route=None, depth="Both", deep=0):
 	if conversation:
 		conversation = _own_record(audit.CONVERSATION, conversation)
 	else:
-		conversation = audit.start_conversation(route, title=question)  # title is a derived label, see audit.make_title
+		conversation = audit.start_conversation(
+			route, title=question
+		)  # title is a derived label, see audit.make_title
 
 	route_doctype, route_docname = _split_route(route)
 	message = audit.log_exchange(
@@ -93,7 +97,9 @@ def feedback(message=None, value=None, comment=None):
 
 def _require_assistant_user():
 	if ASSISTANT_USER not in frappe.get_roles():
-		frappe.throw(_("You need the {0} role to use the assistant.").format(ASSISTANT_USER), frappe.PermissionError)
+		frappe.throw(
+			_("You need the {0} role to use the assistant.").format(ASSISTANT_USER), frappe.PermissionError
+		)
 
 
 def _require_enabled():

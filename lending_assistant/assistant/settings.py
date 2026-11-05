@@ -14,7 +14,9 @@ SETTINGS_DOCTYPE = "Assistant Settings"
 
 
 def _cached():
-	return frappe.get_cached_doc(SETTINGS_DOCTYPE)  # AST-ALLOWED: app config, the one settings reader (DECISIONS #17)
+	return frappe.get_cached_doc(  # AST-ALLOWED: app config, the one settings reader (DECISIONS #17)
+		SETTINGS_DOCTYPE
+	)
 
 
 def get_settings():
@@ -32,4 +34,6 @@ def get_api_key() -> str | None:
 
 	Not called anywhere in M1.
 	"""
-	return _cached().get_password("api_key", raise_exception=False)  # AST-ALLOWED: the one reader of the API key (G8), server-side only
+	return _cached().get_password(  # AST-ALLOWED: the one reader of the API key (G8), server-side only
+		"api_key", raise_exception=False
+	)

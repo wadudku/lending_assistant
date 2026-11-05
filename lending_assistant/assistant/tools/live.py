@@ -34,7 +34,9 @@ GET_SCREEN_HELP_SCHEMA = {
 		"type": "object",
 		"properties": {
 			"doctype": {"type": "string", "description": "The doctype name, for example Loan Repayment."},
-			"search": _string_or_null("Only fields whose label or fieldname contains this text (case-insensitive), or null."),
+			"search": _string_or_null(
+				"Only fields whose label or fieldname contains this text (case-insensitive), or null."
+			),
 		},
 		"required": ["doctype", "search"],
 		"additionalProperties": False,
@@ -56,7 +58,9 @@ CHECK_MY_ACCESS_SCHEMA = {
 				"items": {"type": "string", "enum": list(access.ACTIONS)},
 				"description": "One to six different actions.",
 			},
-			"docname": _string_or_null("A record ID to check the actions on that record, or null for the doctype."),
+			"docname": _string_or_null(
+				"A record ID to check the actions on that record, or null for the doctype."
+			),
 		},
 		"required": ["doctype", "actions", "docname"],
 		"additionalProperties": False,
@@ -94,10 +98,21 @@ FIND_RECORDS_SCHEMA = {
 		"type": "object",
 		"properties": {
 			"doctype": {"type": "string", "description": "The doctype name."},
-			"filters": {"type": "array", "items": _FILTER, "description": "At most 10 conditions; an empty list means no filter."},
-			"fields": {"type": "array", "items": {"type": "string"}, "description": "1 to 30 fieldnames you can read."},
+			"filters": {
+				"type": "array",
+				"items": _FILTER,
+				"description": "At most 10 conditions; an empty list means no filter.",
+			},
+			"fields": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": "1 to 30 fieldnames you can read.",
+			},
 			"order_by": _string_or_null("'<fieldname> asc' or '<fieldname> desc', or null."),
-			"limit": {"type": ["integer", "null"], "description": "Rows wanted, 1 to 20; null means 20. More than 20 is cut to 20."},
+			"limit": {
+				"type": ["integer", "null"],
+				"description": "Rows wanted, 1 to 20; null means 20. More than 20 is cut to 20.",
+			},
 		},
 		"required": ["doctype", "filters", "fields", "order_by", "limit"],
 		"additionalProperties": False,
@@ -146,7 +161,11 @@ def get_screen_help(doctype, search=None) -> str:
 
 
 def check_my_access(doctype, actions, docname=None) -> str:
-	if not isinstance(actions, list | tuple) or not 1 <= len(actions) <= len(access.ACTIONS) or len(set(actions)) != len(actions):
+	if (
+		not isinstance(actions, list | tuple)
+		or not 1 <= len(actions) <= len(access.ACTIONS)
+		or len(set(actions)) != len(actions)
+	):
 		raise frappe.ValidationError("Give 1 to 6 different actions.")
 	answer = access.check_my_access(doctype, list(actions), docname)
 	mine = set(frappe.get_roles())
@@ -170,7 +189,9 @@ def _condition(item: dict) -> list:
 	operator = item["operator"]
 	if operator in LIST_OPERATORS:
 		if item["value"] is not None or item["values"] is None:
-			raise frappe.ValidationError(f"The {operator} operator takes 'values' (a list) and a null 'value'.")
+			raise frappe.ValidationError(
+				f"The {operator} operator takes 'values' (a list) and a null 'value'."
+			)
 		return [item["field"], operator, list(item["values"])]
 	if item["values"] is not None or item["value"] is None:
 		raise frappe.ValidationError(f"The {operator} operator takes 'value' and a null 'values'.")

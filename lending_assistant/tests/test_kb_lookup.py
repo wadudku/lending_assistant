@@ -10,9 +10,13 @@ def ids(rows):
 
 class TestLookup(AssistantTestCase):
 	def test_each_by_key_finds_its_cards(self):
-		self.assertIn("howto.loan_repayment.create", ids(lookup.lookup(doctype="Loan Repayment", action="create")))
+		self.assertIn(
+			"howto.loan_repayment.create", ids(lookup.lookup(doctype="Loan Repayment", action="create"))
+		)
 		self.assertIn("howto.loan_repayment.create", ids(lookup.lookup(action="Loan Repayment:create")))
-		self.assertEqual(ids(lookup.lookup(br_id="BR-LMS-162"))[:2], ["bridge.BR-LMS-162", "concept.BR-LMS-162"])
+		self.assertEqual(
+			ids(lookup.lookup(br_id="BR-LMS-162"))[:2], ["bridge.BR-LMS-162", "concept.BR-LMS-162"]
+		)
 		self.assertEqual(ids(lookup.lookup(brd_section="7.10"))[0], "brd_section.7.10")
 		self.assertIn("glossary.sma", ids(lookup.lookup(term="SMA")))
 		self.assertEqual(ids(lookup.lookup(journey="J3"))[0], "journey.J3")
@@ -40,7 +44,9 @@ class TestLookup(AssistantTestCase):
 
 	def test_170r_and_170c(self):
 		self.assertEqual(ids(lookup.lookup(br_id="170r")), ["bridge.BR-LMS-170r", "concept.BR-LMS-170r"])
-		self.assertEqual(ids(lookup.lookup(br_id="BR-LMS-170c")), ["bridge.BR-LMS-170c", "concept.BR-LMS-170c"])
+		self.assertEqual(
+			ids(lookup.lookup(br_id="BR-LMS-170c")), ["bridge.BR-LMS-170c", "concept.BR-LMS-170c"]
+		)
 		plain = ids(lookup.lookup(br_id="BR-LMS-170"))
 		self.assertTrue({"bridge.BR-LMS-170r", "bridge.BR-LMS-170c"} <= set(plain))
 
@@ -75,30 +81,57 @@ class TestLookup(AssistantTestCase):
 		self.assertEqual(keys["dev_item"], [])
 		self.assertEqual(retrieve.extract_keys("What is dev item D3 about?")["dev_item"], ["D3"])
 		self.assertEqual(retrieve.extract_keys("What is D3 about?")["dev_item"], ["D3"])
-		self.assertNotIn("devitem.D3", [item["id"] for item in retrieve.retrieve("What does D3 in BRD section 12 mean?")][:1])
+		self.assertNotIn(
+			"devitem.D3",
+			[item["id"] for item in retrieve.retrieve("What does D3 in BRD section 12 mean?")][:1],
+		)
 
 	def test_no_devitem_card_in_the_top_3_of_a_brd_dependency_question(self):
 		"""#103 in retrieve, every stage: quoted text, a cue far away, and search results too."""
 		quoted = "The BRD dependencies table (page 40, last row) reads: 'D4 Bangladesh Bank CIB access to be arranged by the bank'. Explain."
 		far = "In the long table at the very end of the document there is a row for D4 Bangladesh Bank CIB access, so what is it about, and the risk?"
 		nocue_quote = "The table says 'D4 Bangladesh Bank CIB access to be arranged' and what does that line mean for us?"
-		for question in (quoted, far, nocue_quote, "What does dependency D4 in the BRD mean?", "Tell me about D4 and D19 as dependencies."):
+		for question in (
+			quoted,
+			far,
+			nocue_quote,
+			"What does dependency D4 in the BRD mean?",
+			"Tell me about D4 and D19 as dependencies.",
+		):
 			with self.subTest(question=question[:50]):
 				detail = retrieve.retrieve_detail(question)
 				self.assertEqual(detail["keys"]["dev_item"], [])
-				self.assertFalse([i["id"] for i in detail["top"] if i["id"].startswith("devitem.")], detail["top"])
-		self.assertEqual(retrieve.retrieve_detail("What will dev item D4 build?")["top"][0]["id"], "devitem.D4")
+				self.assertFalse(
+					[i["id"] for i in detail["top"] if i["id"].startswith("devitem.")], detail["top"]
+				)
+		self.assertEqual(
+			retrieve.retrieve_detail("What will dev item D4 build?")["top"][0]["id"], "devitem.D4"
+		)
 		self.assertEqual(retrieve.retrieve_detail("What will D4 build?")["top"][0]["id"], "devitem.D4")
 		# an explicit dev item is honoured even beside a BRD word
-		self.assertEqual(retrieve.extract_keys("Which BRD dependency does dev item D4 cover?")["dev_item"], ["D4"])
+		self.assertEqual(
+			retrieve.extract_keys("Which BRD dependency does dev item D4 cover?")["dev_item"], ["D4"]
+		)
 		# never from quoted text, even if it says dev item
-		self.assertEqual(retrieve.extract_keys("The note says 'dev item D4 is late'. What is that?")["dev_item"], [])
+		self.assertEqual(
+			retrieve.extract_keys("The note says 'dev item D4 is late'. What is that?")["dev_item"], []
+		)
 
 	def test_unknown_or_hostile_input_gives_nothing(self):
 		for kw in (
-			{"br_id": "BR-LMS-999"}, {"br_id": "nonsense"}, {"br_id": 5}, {"brd_section": "99.9"}, {"brd_section": "../x"},
-			{"journey": "J99"}, {"journey": "x"}, {"term": "no such term"}, {"doctype": "No Such Doctype"}, {"term": "x" * 1000},
-			{"action": "nonexistent"}, {"doctype": ["Loan"]}, {"br_id": "BR-LMS-162\x00"},
+			{"br_id": "BR-LMS-999"},
+			{"br_id": "nonsense"},
+			{"br_id": 5},
+			{"brd_section": "99.9"},
+			{"brd_section": "../x"},
+			{"journey": "J99"},
+			{"journey": "x"},
+			{"term": "no such term"},
+			{"doctype": "No Such Doctype"},
+			{"term": "x" * 1000},
+			{"action": "nonexistent"},
+			{"doctype": ["Loan"]},
+			{"br_id": "BR-LMS-162\x00"},
 		):
 			with self.subTest(kw=str(kw)[:40]):
 				self.assertEqual(lookup.lookup(**kw), [])

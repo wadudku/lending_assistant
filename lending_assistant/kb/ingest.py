@@ -36,7 +36,9 @@ class IngestRefused(Exception):
 
 
 def _read_bytes(path: str) -> bytes:
-	with open(path, "rb") as handle:  # AST-ALLOWED: ingest reads the given source folder and its own destination folders
+	with open(  # AST-ALLOWED: ingest reads the given source folder and its own destination folders
+		path, "rb"
+	) as handle:
 		return handle.read()
 
 
@@ -50,14 +52,18 @@ def _make_dirs(root: str, path: str) -> None:
 	"""Create the folder `path`, which must sit inside `root`."""
 	if not _inside(root, path):
 		raise IngestRefused(f"refusing to create a folder outside {root}: {path}")
-	os.makedirs(path, exist_ok=True)  # AST-ALLOWED: ingest creates folders only under kb/knowledge/ and public/kb_img/ (checked above)
+	os.makedirs(  # AST-ALLOWED: ingest creates folders only under kb/knowledge/ and public/kb_img/ (checked above)
+		path, exist_ok=True
+	)
 
 
 def _remove_file(root: str, path: str) -> None:
 	"""Delete the file `path`, which must sit inside `root`."""
 	if not _inside(root, path) or os.path.realpath(path) == os.path.realpath(root):
 		raise IngestRefused(f"refusing to delete outside {root}: {path}")
-	os.remove(os.path.realpath(path))  # AST-ALLOWED: ingest removes only files it owns under its two folders (checked above)
+	os.remove(  # AST-ALLOWED: ingest removes only files it owns under its two folders (checked above)
+		os.path.realpath(path)
+	)
 
 
 def _write_bytes(root: str, path: str, data: bytes) -> None:
@@ -67,9 +73,13 @@ def _write_bytes(root: str, path: str, data: bytes) -> None:
 		raise IngestRefused(f"refusing to write outside {root}: {path}")
 	_make_dirs(root, os.path.dirname(real))
 	temp = real + ".tmp"
-	with open(temp, "wb") as handle:  # AST-ALLOWED: ingest writes only under kb/knowledge/ and public/kb_img/ (checked above)
+	with open(  # AST-ALLOWED: ingest writes only under kb/knowledge/ and public/kb_img/ (checked above)
+		temp, "wb"
+	) as handle:
 		handle.write(data)
-	os.replace(temp, real)  # AST-ALLOWED: moves the temp file written just above onto its target inside the same folder
+	os.replace(  # AST-ALLOWED: moves the temp file written just above onto its target inside the same folder
+		temp, real
+	)
 
 
 def _list_dir(path: str) -> list[str]:
@@ -151,7 +161,9 @@ def _plan(source: str, commit: str) -> dict:
 		head, _body = store.parse_front_matter(text)
 		for field in ("id", "type", "version", "status"):
 			if head.get(field) != (card_id if field == "id" else entry.get(field)):
-				raise IngestRefused(f"{card_id}: card file {field}={head.get(field)!r} differs from the index {entry.get(field)!r}")
+				raise IngestRefused(
+					f"{card_id}: card file {field}={head.get(field)!r} differs from the index {entry.get(field)!r}"
+				)
 		if head.get("status") != "approved":
 			raise IngestRefused(f"{card_id}: the card file is not status: approved")
 		new_text, names = _rewrite(text, card_id)
@@ -163,7 +175,10 @@ def _plan(source: str, commit: str) -> dict:
 			"sha256_source": _sha(raw), "sha256": _sha(data),
 		})  # fmt: skip
 		entries[card_id] = {
-			**entry, "images": [IMG_URL + name[4:] if name.startswith("img/") else name for name in entry.get("images", [])]
+			**entry,
+			"images": [
+				IMG_URL + name[4:] if name.startswith("img/") else name for name in entry.get("images", [])
+			],
 		}
 	if not entries:
 		raise IngestRefused("no approved cards in the source index")
@@ -186,7 +201,9 @@ def _plan(source: str, commit: str) -> dict:
 		"cards": cards,
 		"images": [{"path": name, "sha256": _sha(data)} for name, data in sorted(images.items())],
 	}
-	files[MANIFEST] = (json.dumps(manifest, sort_keys=True, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
+	files[MANIFEST] = (json.dumps(manifest, sort_keys=True, ensure_ascii=False, indent=1) + "\n").encode(
+		"utf-8"
+	)
 	return {"files": files, "images": images, "skipped": skipped}
 
 
@@ -199,8 +216,12 @@ def _owned_card(rel: str) -> bool:
 	if rel in ("index.json", MANIFEST):
 		return True
 	return (
-		len(parts) == 3 and parts[0] == "cards" and parts[1] in store.TYPES and parts[2].endswith(".md")
-		and bool(store.CARD_ID.match(parts[2][:-3])) and parts[2][:-3].startswith(parts[1] + ".")
+		len(parts) == 3
+		and parts[0] == "cards"
+		and parts[1] in store.TYPES
+		and parts[2].endswith(".md")
+		and bool(store.CARD_ID.match(parts[2][:-3]))
+		and parts[2][:-3].startswith(parts[1] + ".")
 	)
 
 
@@ -240,7 +261,9 @@ def _check_destination(path: str, default: str) -> None:
 	real = os.path.realpath(path)
 	allowed = (os.path.realpath(default), os.path.realpath(tempfile.gettempdir()))
 	if not any(real == base or real.startswith(base + os.sep) for base in allowed):
-		raise IngestRefused(f"refusing destination {path!r}: it is neither {default} nor inside a temp directory")
+		raise IngestRefused(
+			f"refusing destination {path!r}: it is neither {default} nor inside a temp directory"
+		)
 
 
 def _apply(root: str, wanted: dict[str, bytes], owned: set[str]) -> dict:
@@ -269,13 +292,17 @@ def run(source=None, dest=None, img_dest=None, commit=None):
 	if not source or not isinstance(source, str):
 		raise IngestRefused("source= is required: the build repo's knowledge/ folder")
 	if not commit or not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{7,40}", commit):
-		raise IngestRefused("commit= is required: the build repo commit the cards come from (git rev-parse HEAD)")
+		raise IngestRefused(
+			"commit= is required: the build repo commit the cards come from (git rev-parse HEAD)"
+		)
 	dest = dest or DEFAULT_DEST
 	img_dest = img_dest or DEFAULT_IMG_DEST
 	_check_destination(dest, DEFAULT_DEST)
 	_check_destination(img_dest, DEFAULT_IMG_DEST)
 	plan = _plan(os.path.abspath(source), commit)
-	owned_dest = _existing(dest, ["cards"], _owned_card) | {name for name in _list_dir(dest) if name in ("index.json", MANIFEST)}
+	owned_dest = _existing(dest, ["cards"], _owned_card) | {
+		name for name in _list_dir(dest) if name in ("index.json", MANIFEST)
+	}
 	owned_img = _existing(img_dest, [""], _owned_image) if os.path.isdir(img_dest) else set()
 	# all destination checks happen here, before the first write
 	_check_targets(dest, [*plan["files"], *owned_dest], "knowledge")
@@ -283,7 +310,12 @@ def run(source=None, dest=None, img_dest=None, commit=None):
 	first = _apply(dest, plan["files"], owned_dest)
 	second = _apply(img_dest, plan["images"], owned_img)
 	result = {key: first[key] + second[key] for key in first}
-	result.update(cards=len(plan["files"]) - 2, images=len(plan["images"]), commit=commit, drafts_skipped=len(plan["skipped"]))
+	result.update(
+		cards=len(plan["files"]) - 2,
+		images=len(plan["images"]),
+		commit=commit,
+		drafts_skipped=len(plan["skipped"]),
+	)
 	store.reset_cache()
 	print(
 		f"ingest: new {result['new']} / changed {result['changed']} / removed {result['removed']}; "

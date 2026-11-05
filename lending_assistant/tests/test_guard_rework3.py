@@ -51,7 +51,9 @@ class TestR13IdentityLayer(Rework3Case):
 			with guard.read_only_tool_context("AST-TEST-del-db") as ctx:
 				frappe.set_user("Administrator")
 				del frappe.local.db
-		self.assertIn("identity or connection changed", str(caught.exception))  # not RuntimeError: object is not bound
+		self.assertIn(
+			"identity or connection changed", str(caught.exception)
+		)  # not RuntimeError: object is not bound
 		self.assertEqual(sorted(ctx.identity_changes), ["database connection", "session user"])
 		self.assertIntact()
 		self.assertEqual(error_logs(), self.logs + 1)
@@ -84,7 +86,9 @@ class TestR13IdentityLayer(Rework3Case):
 				seen.append(frappe.local.db)
 		self.assertIsNot(seen[0], self.db)
 		self.assertIntact()
-		self.assertEqual(frappe.db.sql("select 1")[0][0], 1)  # the original is back and has its savepoint released
+		self.assertEqual(
+			frappe.db.sql("select 1")[0][0], 1
+		)  # the original is back and has its savepoint released
 
 	def test_a_context_on_a_cold_connection_opens_and_closes_cleanly(self):
 		original = frappe.local.db
@@ -151,7 +155,8 @@ class TestR14SavepointGone(Rework3Case):
 		self.assertEqual(ctx.summary()["savepoint_gone"], 1)
 		self.assertEqual(error_logs(), self.logs + 1)
 		text = frappe.db.sql(
-			"select error from `tabError Log` where method=%s order by creation desc limit 1", "AST write blocked"
+			"select error from `tabError Log` where method=%s order by creation desc limit 1",
+			"AST write blocked",
 		)[0][0]
 		self.assertIn("tool=AST-TEST-raw-commit", text)
 		self.assertIn("savepoint_gone=1", text)
@@ -200,7 +205,10 @@ class TestR15RogueConnection(Rework3Case):
 				frappe.connect()
 				rogue = frappe.local.db
 				self.rogues.append(rogue)
-				rogue.sql("insert into `tabDeleted Document` (name, deleted_doctype, deleted_name, creation, modified) values (%s, 'x', %s, now(), now())", (marker, marker))
+				rogue.sql(
+					"insert into `tabDeleted Document` (name, deleted_doctype, deleted_name, creation, modified) values (%s, 'x', %s, now(), now())",
+					(marker, marker),
+				)
 				raw = rogue._conn
 		self.assertClosed(raw)
 		fresh = frappe.db.sql("select count(*) from `tabDeleted Document` where name=%s", marker)[0][0]
@@ -209,7 +217,13 @@ class TestR15RogueConnection(Rework3Case):
 
 class TestR16FlagContents(Rework3Case):
 	def test_a_security_relevant_flag_changed_inside_is_a_violation_and_is_restored(self):
-		for key, value in (("in_install", "frappe"), ("mute_emails", True), ("ignore_links", True), ("ast_something", 1), ("ignore_permissions", True)):
+		for key, value in (
+			("in_install", "frappe"),
+			("mute_emails", True),
+			("ignore_links", True),
+			("ast_something", 1),
+			("ignore_permissions", True),
+		):
 			with self.subTest(key):
 				before = frappe.flags.get(key)
 				with self.assertRaises(guard.AssistantGuardError):
@@ -254,11 +268,19 @@ class TestR16FlagContents(Rework3Case):
 			frappe.flags.pop("in_test_marker", None)
 
 	def test_the_guards_own_flags_are_not_a_violation(self):
-		self.as_user("senior")  # a user who can really insert: the trap, not the permission check, must refuse
+		self.as_user(
+			"senior"
+		)  # a user who can really insert: the trap, not the permission check, must refuse
 		self.user = frappe.session.user
 		with guard.read_only_tool_context("AST-TEST-own") as ctx:
 			with self.assertRaises(frappe.PermissionError):
-				frappe.get_doc({"doctype": "Loan Category", "loan_category_code": "AST-R16", "loan_category_name": "AST-R16"}).insert()
+				frappe.get_doc(
+					{
+						"doctype": "Loan Category",
+						"loan_category_code": "AST-R16",
+						"loan_category_name": "AST-R16",
+					}
+				).insert()
 		self.assertEqual(ctx.identity_changes, [])
 		self.assertEqual(ctx.trap_hits, 1)
 
@@ -269,4 +291,6 @@ class TestR16FlagContents(Rework3Case):
 			guard.read_doc(LOAN, visible)
 			guard.list_records(LOAN, limit=3)
 		self.assertEqual(ctx.identity_changes, [])
-		self.assertEqual({k: v for k, v in frappe.flags.items() if k.startswith(guard._RISKY_FLAG_PREFIXES)}, before)
+		self.assertEqual(
+			{k: v for k, v in frappe.flags.items() if k.startswith(guard._RISKY_FLAG_PREFIXES)}, before
+		)

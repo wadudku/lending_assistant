@@ -12,14 +12,26 @@ class TestRetrieve(AssistantTestCase):
 	def test_route_doctype_alone_puts_its_screen_card_in_the_top_three(self):
 		st = store.load()
 		screens = {entry["doctypes"][0]: cid for cid, entry in st.cards.items() if entry["type"] == "screen"}
-		for doctype in ("Loan", "Loan Repayment", "Loan Demand", "Loan Write Off", "Loan Product", "Loan Restructure", "Loan Security Shortfall"):
+		for doctype in (
+			"Loan",
+			"Loan Repayment",
+			"Loan Demand",
+			"Loan Write Off",
+			"Loan Product",
+			"Loan Restructure",
+			"Loan Security Shortfall",
+		):
 			with self.subTest(doctype=doctype):
 				rows = retrieve.retrieve("What is this?", route_doctype=doctype)
 				self.assertIn(screens[doctype], [row["id"] for row in rows])
 
 	def test_always_three_with_a_method_each(self):
 		for question, route in (
-			("Is BR-LMS-168 covered?", None), ("loan interest", None), ("What is this?", "Loan"), ("write-off", None), ("zzzz qqqq", None),
+			("Is BR-LMS-168 covered?", None),
+			("loan interest", None),
+			("What is this?", "Loan"),
+			("write-off", None),
+			("zzzz qqqq", None),
 		):
 			with self.subTest(question=question):
 				rows = retrieve.retrieve(question, route)
@@ -61,7 +73,9 @@ class TestRetrieve(AssistantTestCase):
 		self.assertNotEqual(business["lookup"], technical["lookup"])
 
 	def test_key_extraction_rules(self):
-		keys = retrieve.extract_keys("Check BR-LMS-212 and BR 170r, see section 7.10 and 7.7.1 of the BRD, journey J3 and J11, dev item D14.")
+		keys = retrieve.extract_keys(
+			"Check BR-LMS-212 and BR 170r, see section 7.10 and 7.7.1 of the BRD, journey J3 and J11, dev item D14."
+		)
 		self.assertEqual(keys["br_id"][0], "BR-LMS-212")
 		self.assertIn("BR-LMS-170r", keys["br_id"])
 		self.assertEqual(keys["section"], ["7.10", "7.7.1"])
@@ -70,11 +84,15 @@ class TestRetrieve(AssistantTestCase):
 		self.assertEqual(retrieve.extract_keys("the rate is 10.5% a year, or 1,000.50 taka")["section"], [])
 		self.assertEqual(retrieve.extract_keys("a loan")["doctype"], [])  # bare "loan" is not a doctype key
 		self.assertEqual(retrieve.extract_keys("the Loan screen")["doctype"], ["Loan"])
-		self.assertEqual(retrieve.extract_keys("a customer paid")["doctype"], [])  # a one-word doctype needs its capital
+		self.assertEqual(
+			retrieve.extract_keys("a customer paid")["doctype"], []
+		)  # a one-word doctype needs its capital
 		self.assertEqual(retrieve.extract_keys("a new Customer")["doctype"], ["Customer"])
 		self.assertEqual(retrieve.extract_keys("what does sma mean")["term"], [])  # short terms need capitals
 		self.assertEqual(retrieve.extract_keys("what does SMA mean")["term"], ["sma"])
-		self.assertEqual(retrieve.extract_keys("how is the credit given")["term"], [])  # ordinary word, no state cue
+		self.assertEqual(
+			retrieve.extract_keys("how is the credit given")["term"], []
+		)  # ordinary word, no state cue
 		self.assertIn("written off", retrieve.extract_keys("a written-off loan")["term"])
 
 	def test_no_question_specific_code(self):
@@ -82,5 +100,10 @@ class TestRetrieve(AssistantTestCase):
 		import re
 
 		source = open(retrieve.__file__, encoding="utf-8").read()
-		self.assertFalse(re.search(r"\b(?:bridge|concept|howto|screen|journey|glossary|lifecycle|devitem|decision|brd_section)\.[A-Za-z0-9]", source.replace("brd_section.", "")))
+		self.assertFalse(
+			re.search(
+				r"\b(?:bridge|concept|howto|screen|journey|glossary|lifecycle|devitem|decision|brd_section)\.[A-Za-z0-9]",
+				source.replace("brd_section.", ""),
+			)
+		)
 		self.assertFalse(re.search(r"\bR[0-9]{2}\b", source))

@@ -47,7 +47,11 @@ class TestRealApps(GuardTestCase):
 		self.assertEqual(many["count_returned"], 30)
 
 	def test_search_scopes(self):
-		only = unwrap(codereader.search("process_loan_interest_accrual", app="lending", path_glob="*/loan_repayment/*.py"))
+		only = unwrap(
+			codereader.search(
+				"process_loan_interest_accrual", app="lending", path_glob="*/loan_repayment/*.py"
+			)
+		)
 		for match in only["matches"]:
 			self.assertTrue(match.startswith("lending/"))
 			self.assertIn("loan_repayment", match)
@@ -111,7 +115,15 @@ class TestSandboxInTempRoot(GuardTestCase):
 		base = Path(self.tmp.name).resolve()
 		self.apps, self.outside = base / "apps", base / "outside"
 		app = self.apps / "fakeapp"
-		for folder in (app / "pkg", app / ".git", app / "node_modules", app / "__pycache__", app / "sites", self.outside, self.apps / "other"):
+		for folder in (
+			app / "pkg",
+			app / ".git",
+			app / "node_modules",
+			app / "__pycache__",
+			app / "sites",
+			self.outside,
+			self.apps / "other",
+		):
 			folder.mkdir(parents=True)
 		(app / "ok.py").write_text("line one\nneedle x.*y\nxzzy needle2\n")
 		(app / "pkg" / "mod.py").write_text("needle in pkg\n")
@@ -179,7 +191,13 @@ class TestSandboxInTempRoot(GuardTestCase):
 
 	def test_a_missing_file_and_a_forbidden_file_look_the_same(self):
 		messages = set()
-		for path in ("fakeapp/missing.py", "fakeapp/.env", "fakeapp/link_out.py", "fakeapp/big.py", "fakeapp/bin.py"):
+		for path in (
+			"fakeapp/missing.py",
+			"fakeapp/.env",
+			"fakeapp/link_out.py",
+			"fakeapp/big.py",
+			"fakeapp/bin.py",
+		):
 			with self.assertRaises(codereader.CodeReaderRefused) as ctx:
 				codereader.read(path)
 			messages.add(str(ctx.exception))
@@ -191,7 +209,18 @@ class TestSandboxInTempRoot(GuardTestCase):
 	def test_search_never_returns_refused_content(self):
 		parsed = unwrap(codereader.search("needle"))
 		joined = "\n".join(parsed["matches"])
-		for forbidden in ("SECRET", "GITSECRET", "gitconfig", "hidden", "node", "cache", "binary", "exe", "other app", "db_password"):
+		for forbidden in (
+			"SECRET",
+			"GITSECRET",
+			"gitconfig",
+			"hidden",
+			"node",
+			"cache",
+			"binary",
+			"exe",
+			"other app",
+			"db_password",
+		):
 			self.assertNotIn(forbidden, joined)
 		found = {m.split(":")[0] for m in parsed["matches"]}
 		self.assertEqual(found, {"fakeapp/ok.py", "fakeapp/pkg/mod.py", "fakeapp/plain.txt"})

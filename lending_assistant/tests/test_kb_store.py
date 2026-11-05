@@ -8,10 +8,36 @@ from lending_assistant.tests import kb_fixtures as fx
 from lending_assistant.tests.base import AssistantTestCase
 
 BAD_IDS = [
-	"../x", "..", "../../etc/passwd", "bridge/../../index", "/etc/passwd", "C:\\windows\\system.ini", "\\x", "..%2f..%2fetc",
-	"%2e%2e%2f", "bridge.BR-LMS-162/../..", "bridge.BR-LMS-162\x00", "bridge.BR-LMS-162.md", "cards/bridge/bridge.BR-LMS-162.md",
-	" bridge.BR-LMS-162", "bridge.BR-LMS-162 ", "", "x" * 10000, None, 7, 1.5, ["bridge.BR-LMS-162"], {"id": "x"}, b"bridge.BR-LMS-162",
-	"file:///etc/passwd", "http://x/y", "index", "index.json", "ingest_manifest.json", "BRIDGE.BR-LMS-162", "bridge.br-lms-162",
+	"../x",
+	"..",
+	"../../etc/passwd",
+	"bridge/../../index",
+	"/etc/passwd",
+	"C:\\windows\\system.ini",
+	"\\x",
+	"..%2f..%2fetc",
+	"%2e%2e%2f",
+	"bridge.BR-LMS-162/../..",
+	"bridge.BR-LMS-162\x00",
+	"bridge.BR-LMS-162.md",
+	"cards/bridge/bridge.BR-LMS-162.md",
+	" bridge.BR-LMS-162",
+	"bridge.BR-LMS-162 ",
+	"",
+	"x" * 10000,
+	None,
+	7,
+	1.5,
+	["bridge.BR-LMS-162"],
+	{"id": "x"},
+	b"bridge.BR-LMS-162",
+	"file:///etc/passwd",
+	"http://x/y",
+	"index",
+	"index.json",
+	"ingest_manifest.json",
+	"BRIDGE.BR-LMS-162",
+	"bridge.br-lms-162",
 ]
 
 
@@ -46,7 +72,9 @@ class TestStore(AssistantTestCase):
 		ingest.run(source, dest=dest, img_dest=img, commit=fx.COMMIT)
 		# a draft file dropped on disk next to the approved ones, and listed in no index
 		path = os.path.join(dest, "cards", "glossary", "glossary.draft.md")
-		open(path, "w", encoding="utf-8").write(open(os.path.join(source, "cards", "glossary", "glossary.draft.md"), encoding="utf-8").read())
+		open(path, "w", encoding="utf-8").write(
+			open(os.path.join(source, "cards", "glossary", "glossary.draft.md"), encoding="utf-8").read()
+		)
 		st = store.load(dest)
 		self.addCleanup(store.reset_cache)
 		self.assertIsNotNone(st.card("howto.a.b"))

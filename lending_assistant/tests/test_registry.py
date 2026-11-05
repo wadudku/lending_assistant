@@ -67,10 +67,14 @@ class TestRegistryShape(ToolTestCase):
 			self.assertEqual(schema["input_schema"]["type"], "object", name)
 			for path, node in walk(schema["input_schema"]):
 				with self.subTest(tool=name, path=path):
-					self.assertFalse(BANNED_KEYWORDS & set(node), f"{name} {path}: {BANNED_KEYWORDS & set(node)}")
+					self.assertFalse(
+						BANNED_KEYWORDS & set(node), f"{name} {path}: {BANNED_KEYWORDS & set(node)}"
+					)
 					if node.get("type") == "object":
 						self.assertIs(node["additionalProperties"], False)
-						self.assertEqual(sorted(node["required"]), sorted(node["properties"]), "every property is required")
+						self.assertEqual(
+							sorted(node["required"]), sorted(node["properties"]), "every property is required"
+						)
 					self.assertIn("type", node)
 
 	def test_a_nullable_argument_is_typed_with_null_and_the_others_are_not(self):
@@ -83,7 +87,9 @@ class TestRegistryShape(ToolTestCase):
 		for name, entry in registry.TOOLS.items():
 			self.assertFalse(hasattr(entry["function"], "whitelisted"), name)
 			props = set(entry["schema"]["input_schema"]["properties"])
-			self.assertFalse(props & {"user", "role", "roles", "company", "owner", "ignore_permissions"}, name)
+			self.assertFalse(
+				props & {"user", "role", "roles", "company", "owner", "ignore_permissions"}, name
+			)
 
 	def test_tool_definitions_is_a_copy_and_follows_the_switches(self):
 		defs = registry.tool_definitions()
@@ -93,9 +99,13 @@ class TestRegistryShape(ToolTestCase):
 		self.assertNotEqual(registry.TOOLS[defs[0]["name"]]["schema"]["description"], "CHANGED")
 		self.assertTrue(registry.TOOLS[defs[0]["name"]]["schema"]["input_schema"]["properties"])
 		self.configure(live_data=0)
-		self.assertEqual({d["name"] for d in registry.tool_definitions()}, PLAN_TOOLS - {"find_records", "get_record"})
+		self.assertEqual(
+			{d["name"] for d in registry.tool_definitions()}, PLAN_TOOLS - {"find_records", "get_record"}
+		)
 		self.configure(live_data=1, code_reader=0)
-		self.assertEqual({d["name"] for d in registry.tool_definitions()}, PLAN_TOOLS - {"search_code", "read_code"})
+		self.assertEqual(
+			{d["name"] for d in registry.tool_definitions()}, PLAN_TOOLS - {"search_code", "read_code"}
+		)
 
 
 class TestValidation(ToolTestCase):
@@ -107,7 +117,18 @@ class TestValidation(ToolTestCase):
 		return message
 
 	def test_unknown_tools_are_refused_without_listing_the_real_ones(self):
-		for name in ("get_loan_dues", "__import__", "", "GET_RECORD", None, 5, ["get_record"], {"a": 1}, "find_records ", "web_search"):
+		for name in (
+			"get_loan_dues",
+			"__import__",
+			"",
+			"GET_RECORD",
+			None,
+			5,
+			["get_record"],
+			{"a": 1},
+			"find_records ",
+			"web_search",
+		):
 			with self.subTest(name=name):
 				message = self.refused(name, {})
 				self.assertEqual(message, "Unknown tool.")
@@ -130,11 +151,21 @@ class TestValidation(ToolTestCase):
 				self.refused("find_records", {**base, "limit": bad}, "wrong type")
 
 	def test_enum_values_are_checked(self):
-		self.refused("check_my_access", {"doctype": "Loan", "actions": ["read", "drop"], "docname": None}, "allowed values")
+		self.refused(
+			"check_my_access",
+			{"doctype": "Loan", "actions": ["read", "drop"], "docname": None},
+			"allowed values",
+		)
 		self.refused("search_knowledge", {"query": "loan", "type": "not-a-type"}, "allowed values")
 		self.refused(
 			"find_records",
-			{"doctype": "Loan", "filters": [{"field": "name", "operator": "~", "value": "x", "values": None}], "fields": ["name"], "order_by": None, "limit": None},
+			{
+				"doctype": "Loan",
+				"filters": [{"field": "name", "operator": "~", "value": "x", "values": None}],
+				"fields": ["name"],
+				"order_by": None,
+				"limit": None,
+			},
 			"allowed values",
 		)
 
@@ -143,25 +174,52 @@ class TestValidation(ToolTestCase):
 		self.refused("check_my_access", {"doctype": "Loan", "actions": None, "docname": None}, "wrong type")
 
 	def test_lists_have_a_count_limit(self):
-		self.refused("check_my_access", {"doctype": "Loan", "actions": ["read"] * 7, "docname": None}, "too many")
-		self.refused("find_records", {"doctype": "Loan", "filters": [], "fields": [f"f{i}" for i in range(31)], "order_by": None, "limit": None}, "too many")
+		self.refused(
+			"check_my_access", {"doctype": "Loan", "actions": ["read"] * 7, "docname": None}, "too many"
+		)
+		self.refused(
+			"find_records",
+			{
+				"doctype": "Loan",
+				"filters": [],
+				"fields": [f"f{i}" for i in range(31)],
+				"order_by": None,
+				"limit": None,
+			},
+			"too many",
+		)
 		many = [{"field": "name", "operator": "=", "value": "x", "values": None}] * 11
-		self.refused("find_records", {"doctype": "Loan", "filters": many, "fields": ["name"], "order_by": None, "limit": None}, "too many")
+		self.refused(
+			"find_records",
+			{"doctype": "Loan", "filters": many, "fields": ["name"], "order_by": None, "limit": None},
+			"too many",
+		)
 
 	def test_a_missing_nullable_argument_becomes_none(self):
-		cleaned = registry.validate_args(registry.TOOLS["find_records"]["schema"]["input_schema"], {"doctype": "Loan", "filters": [], "fields": ["name"]}, "find_records")
+		cleaned = registry.validate_args(
+			registry.TOOLS["find_records"]["schema"]["input_schema"],
+			{"doctype": "Loan", "filters": [], "fields": ["name"]},
+			"find_records",
+		)
 		self.assertIsNone(cleaned["limit"])
 		self.assertIsNone(cleaned["order_by"])
-		self.assertEqual(registry.validate_args(registry.TOOLS["get_card"]["schema"]["input_schema"], {"card_id": "x"}), {"card_id": "x"})
+		self.assertEqual(
+			registry.validate_args(registry.TOOLS["get_card"]["schema"]["input_schema"], {"card_id": "x"}),
+			{"card_id": "x"},
+		)
 
 	def test_none_arguments_count_as_empty(self):
-		self.assertEqual(registry.validate_args({"type": "object", "properties": {}, "required": []}, None), {})
+		self.assertEqual(
+			registry.validate_args({"type": "object", "properties": {}, "required": []}, None), {}
+		)
 
 	def test_an_error_never_echoes_the_value(self):
 		secret = "S3CR3T-VALUE-" + "x" * 300
 		message = self.refused("get_record", {"doctype": "Loan", "name": secret})
 		self.assertNotIn("S3CR3T", message)
-		message = self.refused("get_record", {"doctype": "Loan", "name": "x", "bad key with spaces <script>": 1})
+		message = self.refused(
+			"get_record", {"doctype": "Loan", "name": "x", "bad key with spaces <script>": 1}
+		)
 		self.assertNotIn("script", message)  # a key that is not a plain name is not repeated
 
 	def test_the_schemas_hold_no_limit_that_python_does_not_check_for_lengths(self):
@@ -174,8 +232,13 @@ class TestSwitches(ToolTestCase):
 	def test_live_data_off_refuses_find_records_and_get_record_and_runs_nothing(self):
 		self.configure(live_data=0)
 		self.as_user("senior")
-		with mock.patch.object(guard, "list_records") as listing, mock.patch.object(guard, "read_doc") as reading:
-			result = self.call("find_records", doctype="Loan", filters=[], fields=["name"], order_by=None, limit=None)
+		with (
+			mock.patch.object(guard, "list_records") as listing,
+			mock.patch.object(guard, "read_doc") as reading,
+		):
+			result = self.call(
+				"find_records", doctype="Loan", filters=[], fields=["name"], order_by=None, limit=None
+			)
 			self.assertEqual(self.error(result), guard.LIVE_DATA_OFF)
 			result = self.call("get_record", doctype="Loan", name="x")
 			self.assertEqual(self.error(result), guard.LIVE_DATA_OFF)
@@ -187,8 +250,15 @@ class TestSwitches(ToolTestCase):
 		self.as_user("senior")
 		from lending_assistant.assistant import codereader
 
-		self.assertEqual(self.error(self.call("search_code", query="hooks", app=None, path_glob=None)), codereader.OFF)
-		self.assertEqual(self.error(self.call("read_code", path="lending/lending/hooks.py", start_line=None, end_line=None)), codereader.OFF)
+		self.assertEqual(
+			self.error(self.call("search_code", query="hooks", app=None, path_glob=None)), codereader.OFF
+		)
+		self.assertEqual(
+			self.error(
+				self.call("read_code", path="lending/lending/hooks.py", start_line=None, end_line=None)
+			),
+			codereader.OFF,
+		)
 
 	def test_the_knowledge_tools_and_the_meta_tools_work_with_both_switches_off(self):
 		self.configure(live_data=0, code_reader=0)
@@ -201,7 +271,10 @@ class TestSwitches(ToolTestCase):
 		visible, _hidden = self.loan_names()
 		self.configure(live_data=0)
 		self.as_user("senior")
-		self.assertEqual(self.error(self.call("check_my_access", doctype="Loan", actions=["read"], docname=visible)), guard.LIVE_DATA_OFF)
+		self.assertEqual(
+			self.error(self.call("check_my_access", doctype="Loan", actions=["read"], docname=visible)),
+			guard.LIVE_DATA_OFF,
+		)
 
 
 def noop_context(tool=""):
@@ -209,7 +282,19 @@ def noop_context(tool=""):
 
 	@contextmanager
 	def manager():
-		yield mock.Mock(summary=lambda: dict.fromkeys(("db_writes", "trap_hits", "callbacks_dropped", "callbacks_restored", "identity_changes", "savepoint_gone"), 0))
+		yield mock.Mock(
+			summary=lambda: dict.fromkeys(
+				(
+					"db_writes",
+					"trap_hits",
+					"callbacks_dropped",
+					"callbacks_restored",
+					"identity_changes",
+					"savepoint_gone",
+				),
+				0,
+			)
+		)
 
 	return manager()
 
@@ -240,7 +325,13 @@ class TestWritesAndIdentity(ToolTestCase):
 		before = self.category_count()
 
 		def writer():
-			frappe.get_doc({"doctype": "Loan Category", "loan_category_code": "AST-TEST-W", "loan_category_name": "AST-TEST-W"}).insert()
+			frappe.get_doc(
+				{
+					"doctype": "Loan Category",
+					"loan_category_code": "AST-TEST-W",
+					"loan_category_name": "AST-TEST-W",
+				}
+			).insert()
 			return guard.as_data({"ok": True})
 
 		result = self.run_double(writer)
@@ -253,7 +344,13 @@ class TestWritesAndIdentity(ToolTestCase):
 
 		def sneaky():
 			try:
-				frappe.get_doc({"doctype": "Loan Category", "loan_category_code": "AST-TEST-S", "loan_category_name": "AST-TEST-S"}).insert()
+				frappe.get_doc(
+					{
+						"doctype": "Loan Category",
+						"loan_category_code": "AST-TEST-S",
+						"loan_category_name": "AST-TEST-S",
+					}
+				).insert()
 			except frappe.PermissionError:
 				pass
 			return guard.as_data({"ok": "it looked fine"})
@@ -268,7 +365,9 @@ class TestWritesAndIdentity(ToolTestCase):
 		before = frappe.db.get_value("Loan Category", name, "loan_category_name")
 
 		def raw():
-			frappe.db.sql("update `tabLoan Category` set loan_category_name=%s where name=%s", ("AST-TEST-RAW", name))
+			frappe.db.sql(
+				"update `tabLoan Category` set loan_category_name=%s where name=%s", ("AST-TEST-RAW", name)
+			)
 			return guard.as_data({"ok": True})
 
 		with self.assertRaises(guard.AssistantGuardError):
@@ -321,14 +420,21 @@ class TestWritesAndIdentity(ToolTestCase):
 			return guard.as_data({"ok": True})
 
 		def swap_session():
-			frappe.local.session = frappe._dict(user="Administrator", sid="Administrator", data=frappe._dict())
+			frappe.local.session = frappe._dict(
+				user="Administrator", sid="Administrator", data=frappe._dict()
+			)
 			return guard.as_data({"ok": True})
 
 		def swap_flags():
 			frappe.local.flags = frappe._dict()
 			return guard.as_data({"ok": True})
 
-		for label, function in (("db", swap_db), ("user", swap_user), ("session", swap_session), ("flags", swap_flags)):
+		for label, function in (
+			("db", swap_db),
+			("user", swap_user),
+			("session", swap_session),
+			("flags", swap_flags),
+		):
 			with self.subTest(swap=label):
 				with mock.patch.object(guard, "read_only_tool_context", noop_context):
 					with self.assertRaises(guard.AssistantGuardError):

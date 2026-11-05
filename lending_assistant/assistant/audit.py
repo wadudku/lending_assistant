@@ -90,7 +90,9 @@ def log_exchange(
 	)
 	message.insert(ignore_permissions=True)  # AST-ALLOWED: app's own audit log
 
-	parent = frappe.get_doc(CONVERSATION, conversation)  # AST-ALLOWED: own audit log; the caller has checked ownership
+	parent = frappe.get_doc(  # AST-ALLOWED: own audit log; the caller has checked ownership
+		CONVERSATION, conversation
+	)
 	parent.message_count = (parent.message_count or 0) + 1
 	parent.last_activity = now_datetime()
 	parent.save(ignore_permissions=True)  # AST-ALLOWED: app's own audit log

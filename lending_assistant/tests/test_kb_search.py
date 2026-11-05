@@ -10,10 +10,19 @@ class TestSearch(AssistantTestCase):
 	def test_an_exact_title_query_ranks_that_card_first(self):
 		st = store.load()
 		checked = 0
-		for cid in ("bridge.BR-LMS-162", "screen.loan_write_off", "howto.loan_refund.create", "glossary.moratorium", "journey.J9", "devitem.D14"):
+		for cid in (
+			"bridge.BR-LMS-162",
+			"screen.loan_write_off",
+			"howto.loan_refund.create",
+			"glossary.moratorium",
+			"journey.J9",
+			"devitem.D14",
+		):
 			title = st.cards[cid]["title"]
 			top = search.search(title)
-			self.assertEqual(top[0]["title"], title, f"{title!r} -> {[r['id'] for r in top]}")  # a concept and its bridge share a title
+			self.assertEqual(
+				top[0]["title"], title, f"{title!r} -> {[r['id'] for r in top]}"
+			)  # a concept and its bridge share a title
 			checked += 1
 		self.assertEqual(checked, 6)
 
@@ -50,9 +59,23 @@ class TestSearch(AssistantTestCase):
 
 	def test_bm25_arithmetic_on_a_tiny_corpus(self):
 		class Tiny:
-			cards = {"ca": {"type": "glossary", "title": "alpha beta", "summary": "", "version": 1, "status": "approved"},
-				"cb": {"type": "glossary", "title": "beta gamma", "summary": "", "version": 1, "status": "approved"}}
-			derived = {}
+			cards = {  # noqa: RUF012
+				"ca": {
+					"type": "glossary",
+					"title": "alpha beta",
+					"summary": "",
+					"version": 1,
+					"status": "approved",
+				},
+				"cb": {
+					"type": "glossary",
+					"title": "beta gamma",
+					"summary": "",
+					"version": 1,
+					"status": "approved",
+				},
+			}
+			derived = {}  # noqa: RUF012
 
 			def map(self, name):
 				return {}

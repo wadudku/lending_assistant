@@ -143,7 +143,27 @@ class GuardTestCase(AssistantTestCase):
 		for table, rows in self._tables.items():
 			settings.set(table, [])
 			for row in rows:
-				settings.append(table, {k: v for k, v in row.items() if k not in ("name", "parent", "parentfield", "parenttype", "idx", "doctype", "creation", "modified", "modified_by", "owner", "docstatus")})
+				settings.append(
+					table,
+					{
+						k: v
+						for k, v in row.items()
+						if k
+						not in (
+							"name",
+							"parent",
+							"parentfield",
+							"parenttype",
+							"idx",
+							"doctype",
+							"creation",
+							"modified",
+							"modified_by",
+							"owner",
+							"docstatus",
+						)
+					},
+				)
 		settings.save(ignore_permissions=True)
 		super().tearDown()
 
@@ -160,10 +180,18 @@ class GuardTestCase(AssistantTestCase):
 	def set_permlevel(self, doctype, fieldname, level=1):
 		"""Temporary permlevel on one field (a Property Setter made here, removed in tearDown; DECISIONS #10)."""
 		frappe.make_property_setter(
-			{"doctype": doctype, "fieldname": fieldname, "property": "permlevel", "value": level, "property_type": "Int"},
+			{
+				"doctype": doctype,
+				"fieldname": fieldname,
+				"property": "permlevel",
+				"value": level,
+				"property_type": "Int",
+			},
 			validate_fields_for_doctype=False,
 		)
-		name = frappe.db.get_value("Property Setter", {"doc_type": doctype, "field_name": fieldname, "property": "permlevel"})
+		name = frappe.db.get_value(
+			"Property Setter", {"doc_type": doctype, "field_name": fieldname, "property": "permlevel"}
+		)
 		self._property_setters.append((name, doctype))
 		frappe.clear_cache(doctype=doctype)
 
@@ -209,6 +237,11 @@ class ToolTestCase(GuardTestCase):
 			"name": "AST-TEST-double",
 			"description": "A test double.",
 			"strict": True,
-			"input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+			"input_schema": {
+				"type": "object",
+				"properties": {},
+				"required": [],
+				"additionalProperties": False,
+			},
 		}
 		return registry._entry(function, schema, needs_switch, source)

@@ -50,7 +50,14 @@ class TestSearchCode(ToolTestCase):
 			with self.subTest(query=query):
 				data = self.data(self.search(query))
 				paths = [m.split(":")[0] for m in data["matches"]]
-				self.assertFalse([p for p in paths if "site_config" in p or "/sites/" in p or "/.git/" in p or p.startswith("sites/")], paths)
+				self.assertFalse(
+					[
+						p
+						for p in paths
+						if "site_config" in p or "/sites/" in p or "/.git/" in p or p.startswith("sites/")
+					],
+					paths,
+				)
 
 
 class TestReadCode(ToolTestCase):
@@ -72,11 +79,15 @@ class TestReadCode(ToolTestCase):
 		self.assertLessEqual(len(data["lines"]), 200)  # fewer when the 8000-character cap comes first
 		self.assertGreater(len(data["lines"]), 100)
 		self.assertTrue(data["truncated"])
-		self.assertLessEqual(len(self.data(self.read())["lines"]), 200)  # null end_line also gives at most 200
+		self.assertLessEqual(
+			len(self.data(self.read())["lines"]), 200
+		)  # null end_line also gives at most 200
 
 	def test_refusals_give_one_reply_that_does_not_say_whether_the_file_exists(self):
 		bench = frappe.utils.get_bench_path()
-		self.assertTrue(os.path.isfile(os.path.join(bench, "sites", "common_site_config.json")), "the fixture file exists")
+		self.assertTrue(
+			os.path.isfile(os.path.join(bench, "sites", "common_site_config.json")), "the fixture file exists"
+		)
 		replies = set()
 		for path in (
 			"lending/../frappe/frappe/hooks.py",

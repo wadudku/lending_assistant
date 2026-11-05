@@ -18,9 +18,15 @@ MAX_QUESTION_CHARS = 1000
 SEARCH_TILT_SHARE = 0.8  # an intent tilt is worth this fraction of itself on a BM25 score
 STRONG = ("br_id", "section", "journey", "dev_item", "term", "action")  # keys that are more than a doctype
 
-_BR_FULL = re.compile(r"(?<![A-Za-z0-9])(?:BR[\s_\-]?)?(LMS|LOS|INT|GOV)[\s_\-]?(\d{1,3})([rca])?(?![A-Za-z0-9])", re.I)
-_BR_BARE = re.compile(r"(?<![A-Za-z0-9])(?:BR|requirement|req|rule)[\s_\-#]*(\d{1,3})([rca])?(?![A-Za-z0-9])", re.I)
-_SECTION_WORD = re.compile(r"(?:section|sec\.?|clause|chapter|brd|§|para(?:graph)?)\s*(\d{1,2}(?:\.\d{1,2}){0,3})(?!\d)", re.I)
+_BR_FULL = re.compile(
+	r"(?<![A-Za-z0-9])(?:BR[\s_\-]?)?(LMS|LOS|INT|GOV)[\s_\-]?(\d{1,3})([rca])?(?![A-Za-z0-9])", re.I
+)
+_BR_BARE = re.compile(
+	r"(?<![A-Za-z0-9])(?:BR|requirement|req|rule)[\s_\-#]*(\d{1,3})([rca])?(?![A-Za-z0-9])", re.I
+)
+_SECTION_WORD = re.compile(
+	r"(?:section|sec\.?|clause|chapter|brd|§|para(?:graph)?)\s*(\d{1,2}(?:\.\d{1,2}){0,3})(?!\d)", re.I
+)
 _SECTION_DOTTED = re.compile(r"(?<![\d.,A-Za-z])(\d{1,2}\.\d{1,2}(?:\.\d{1,2})?)(?![\d%]|,\d|\.\d)")
 _JOURNEY = re.compile(r"(?<![A-Za-z0-9])J\s?-?(\d{1,2})(?![A-Za-z0-9])|\bjourney\s*J?\s*-?(\d{1,2})\b", re.I)
 _DEV_NAMED = re.compile(r"\bdev(?:elopment)?[\s_\-]*items?\s*D?\s*-?(\d{1,2})\b", re.I)
@@ -28,7 +34,9 @@ _DEV_BARE = re.compile(r"(?<![A-Za-z0-9_\-])D\s?-?(\d{1,2})(?![A-Za-z0-9])")  # 
 _DEV_NOT = re.compile(
 	r"\b(?:dependency|dependencies|risk|risks|brd|section\s*1[23]|nrb\s+must|mitigation|assumption)\b", re.I
 )  # #103: "D3" near these words is the BRD's own numbering
-_STATE_CUE = re.compile(r"\b(?:status|state|stage|flag|label|labelled|labeled|class|classified|loan is|goes to|becomes)\b")
+_STATE_CUE = re.compile(
+	r"\b(?:status|state|stage|flag|label|labelled|labeled|class|classified|loan is|goes to|becomes)\b"
+)
 
 # Ordinary English words that are also states or terms: they count as a term only with a cue nearby (or in capitals).
 COMMON_TERMS = {
@@ -99,7 +107,9 @@ def _doctypes(text: str, st) -> tuple[list[str], list[str], str]:
 	for norm, name in names:
 		if norm == "loan":
 			continue  # in almost every question; only "Loan form / screen / record" below counts
-		if " " not in norm and not re.search(r"(?<![A-Za-z0-9])" + re.escape(name) + r"(?![A-Za-z0-9])", text):
+		if " " not in norm and not re.search(
+			r"(?<![A-Za-z0-9])" + re.escape(name) + r"(?![A-Za-z0-9])", text
+		):
 			continue  # a one-word doctype (Customer, Branch, Report) counts only when written with its capital
 		pattern = r"(?<![a-z0-9])" + re.escape(norm) + r"(?:s|es)?(?![a-z0-9])"
 		hit = re.search(pattern, spaced)
@@ -109,7 +119,7 @@ def _doctypes(text: str, st) -> tuple[list[str], list[str], str]:
 	# "refund" for Loan Refund: the part after "Loan " counts as a weaker mention when it is a whole word of 6+ letters
 	for norm, name in names:
 		tail = norm[5:] if norm.startswith("loan ") else ""
-		if name in found or len(tail) < 6 or " " in tail and len(tail.split()) > 2:
+		if name in found or len(tail) < 6 or (" " in tail and len(tail.split()) > 2):
 			continue
 		hit = re.search(r"(?<![a-z0-9])" + re.escape(tail) + r"(?:s|es)?(?![a-z0-9])", spaced)
 		if hit and not any(name.lower() in other.lower() for other in found if other != name):
@@ -145,7 +155,9 @@ def _terms(original: str, blanked: str, st) -> list[str]:
 	return found
 
 
-_QUOTED = re.compile(r"(?<![A-Za-z0-9])'[^']*'(?![A-Za-z0-9])|\"[^\"]*\"|\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019")
+_QUOTED = re.compile(
+	r"(?<![A-Za-z0-9])'[^']*'(?![A-Za-z0-9])|\"[^\"]*\"|\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019"
+)
 
 
 def _quoted_spans(text: str) -> list[tuple[int, int]]:
@@ -172,14 +184,29 @@ def extract_keys(question: str, route_doctype=None, st=None) -> dict:
 	st = st or store.load()
 	original = _normal(question) if isinstance(question, str) else ""
 	lower = original.lower()
-	keys: dict[str, list[str]] = {name: [] for name in ("br_id", "section", "journey", "dev_item", "term", "action", "doctype", "route", "mention")}
+	keys: dict[str, list[str]] = {
+		name: []
+		for name in (
+			"br_id",
+			"section",
+			"journey",
+			"dev_item",
+			"term",
+			"action",
+			"doctype",
+			"route",
+			"mention",
+		)
+	}
 
 	def push(name, value):
 		if value and value not in keys[name]:
 			keys[name].append(value)
 
 	for match in _BR_FULL.finditer(original):
-		for key in lookup.normalise_br_id(f"BR-{match.group(1).upper()}-{match.group(2)}{(match.group(3) or '').lower()}", st):
+		for key in lookup.normalise_br_id(
+			f"BR-{match.group(1).upper()}-{match.group(2)}{(match.group(3) or '').lower()}", st
+		):
 			push("br_id", key)
 	for match in _BR_BARE.finditer(original):
 		for key in lookup.normalise_br_id(f"{match.group(1)}{(match.group(2) or '').lower()}", st):
@@ -263,7 +290,10 @@ def retrieve_detail(question, route_doctype=None, depth=None, st=None) -> dict:
 	if brd_context(normal) and not names_dev_item(normal):  # #103: no devitem card, from lookup or search
 		ordered = [cid for cid in ordered if st.cards[cid]["type"] != "devitem"]
 		text_scores = {cid: sc for cid, sc in text_scores.items() if st.cards[cid]["type"] != "devitem"}
-	top = [{"id": cid, "method": "lookup", "score": points[cid] + tilt.get(st.cards[cid]["type"], 0)} for cid in ordered[:TOP]]
+	top = [
+		{"id": cid, "method": "lookup", "score": points[cid] + tilt.get(st.cards[cid]["type"], 0)}
+		for cid in ordered[:TOP]
+	]
 	doctype_only = bool(ordered) and not any(keys[name] for name in STRONG)
 	if doctype_only:
 		top = top[: TOP - 1]

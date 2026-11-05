@@ -46,7 +46,7 @@ def public_functions(module):
 
 
 class TestPlainDataSurface(GuardTestCase):
-	MODULES = {"guard": guard, "access": access, "codereader": codereader}
+	MODULES = {"guard": guard, "access": access, "codereader": codereader}  # noqa: RUF012
 
 	def samples(self):
 		visible, _hidden = self.loan_names()
@@ -95,7 +95,9 @@ class TestPlainDataSurface(GuardTestCase):
 				if call is None:
 					continue
 				with self.subTest(f"{module_name}.{name}"):
-					if name == "block_if_read_only":  # the doc_events hook: inside a context it raises by design
+					if (
+						name == "block_if_read_only"
+					):  # the doc_events hook: inside a context it raises by design
 						assert_plain(self, call(), f"{module_name}.{name}()")
 						continue
 					with guard.read_only_tool_context("AST-TEST-surface"):

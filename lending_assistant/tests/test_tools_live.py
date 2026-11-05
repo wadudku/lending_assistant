@@ -10,7 +10,13 @@ FILTER = {"field": "loan_product", "operator": "=", "value": "PL-EMI", "values":
 
 
 def find(testcase, **overrides):
-	args = {"doctype": "Loan", "filters": [], "fields": ["name", "loan_product"], "order_by": None, "limit": None}
+	args = {
+		"doctype": "Loan",
+		"filters": [],
+		"fields": ["name", "loan_product"],
+		"order_by": None,
+		"limit": None,
+	}
 	args.update(overrides)
 	return testcase.call("find_records", **args)
 
@@ -32,18 +38,24 @@ class TestGetScreenHelp(ToolTestCase):
 	def test_search_reaches_the_fields_that_the_cut_left_out_and_is_not_truncated(self):
 		full = self.data(self.call("get_screen_help", doctype="Loan", search=None))
 		shown = {f["fieldname"] for f in full["fields"]}
-		everything = self.data(self.call("get_screen_help", doctype="Loan", search="a"))  # nearly every field matches "a"
+		everything = self.data(
+			self.call("get_screen_help", doctype="Loan", search="a")
+		)  # nearly every field matches "a"
 		self.assertGreater(everything["fields_total"], len(shown))
 		hidden_name = "penalty_income_account"  # one of the last fields
 		self.assertNotIn(hidden_name, shown)
-		found = self.data(self.call("get_screen_help", doctype="Loan", search="PENALTY INCOME"))  # case-insensitive, label
+		found = self.data(
+			self.call("get_screen_help", doctype="Loan", search="PENALTY INCOME")
+		)  # case-insensitive, label
 		self.assertIn(hidden_name, {f["fieldname"] for f in found["fields"]})
 		self.assertFalse(found["truncated"])
 		self.assertEqual(found["fields_omitted"], 0)
 		self.assertNotIn("note", found)
 		by_name = self.data(self.call("get_screen_help", doctype="Loan", search="repayment_periods"))
 		self.assertEqual([f["fieldname"] for f in by_name["fields"]], ["repayment_periods"])
-		self.assertEqual(self.data(self.call("get_screen_help", doctype="Loan", search="zzzz-no-field"))["fields"], [])
+		self.assertEqual(
+			self.data(self.call("get_screen_help", doctype="Loan", search="zzzz-no-field"))["fields"], []
+		)
 
 	def test_the_fields_carry_label_type_options_and_description_and_the_doctype_has_a_controller_path(self):
 		data = self.data(self.call("get_screen_help", doctype="Loan Repayment", search="posting"))
@@ -51,11 +63,16 @@ class TestGetScreenHelp(ToolTestCase):
 		self.assertEqual(field["fieldname"], "posting_date")
 		self.assertEqual(field["fieldtype"], "Datetime")
 		self.assertEqual(data["module"], "Loan Management")
-		self.assertEqual(data["controller_path"], "lending/lending/loan_management/doctype/loan_repayment/loan_repayment.py")
+		self.assertEqual(
+			data["controller_path"],
+			"lending/lending/loan_management/doctype/loan_repayment/loan_repayment.py",
+		)
 
 	def test_the_controller_path_is_null_when_the_code_reader_is_off(self):
 		self.configure(code_reader=0)
-		self.assertIsNone(self.data(self.call("get_screen_help", doctype="Loan", search="posting"))["controller_path"])
+		self.assertIsNone(
+			self.data(self.call("get_screen_help", doctype="Loan", search="posting"))["controller_path"]
+		)
 
 	def test_linked_doctypes_say_whether_they_are_on_the_allowlist(self):
 		data = self.data(self.call("get_screen_help", doctype="Loan", search="a"))
@@ -64,13 +81,19 @@ class TestGetScreenHelp(ToolTestCase):
 		self.assertFalse(links["Company"]["on_allowlist"])
 
 	def test_layout_and_hidden_fields_are_skipped(self):
-		types = {f["fieldtype"] for f in self.data(self.call("get_screen_help", doctype="Loan Repayment", search=None))["fields"]}
+		types = {
+			f["fieldtype"]
+			for f in self.data(self.call("get_screen_help", doctype="Loan Repayment", search=None))["fields"]
+		}
 		self.assertFalse(types & {"Section Break", "Column Break", "Tab Break", "HTML", "Button"})
 
 	def test_a_doctype_that_is_not_on_the_allowlist_is_refused(self):
 		for doctype in ("User", "DocType", "Error Log", "", "loan"):
 			with self.subTest(doctype=doctype):
-				self.assertEqual(self.error(self.call("get_screen_help", doctype=doctype, search=None)), guard.NOT_ALLOWED_DOCTYPE)
+				self.assertEqual(
+					self.error(self.call("get_screen_help", doctype=doctype, search=None)),
+					guard.NOT_ALLOWED_DOCTYPE,
+				)
 
 	def test_a_long_search_is_refused(self):
 		self.assertIn("too long", self.error(self.call("get_screen_help", doctype="Loan", search="x" * 101)))
@@ -82,11 +105,19 @@ class TestCheckMyAccess(ToolTestCase):
 		self.as_user("senior")
 
 	def test_actions_must_be_one_to_six_different_ones(self):
-		self.assertIn("1 to 6", self.error(self.call("check_my_access", doctype="Loan", actions=[], docname=None)))
-		self.assertIn("1 to 6", self.error(self.call("check_my_access", doctype="Loan", actions=["read", "read"], docname=None)))
+		self.assertIn(
+			"1 to 6", self.error(self.call("check_my_access", doctype="Loan", actions=[], docname=None))
+		)
+		self.assertIn(
+			"1 to 6",
+			self.error(self.call("check_my_access", doctype="Loan", actions=["read", "read"], docname=None)),
+		)
 
 	def test_a_doctype_off_the_allowlist_is_refused(self):
-		self.assertEqual(self.error(self.call("check_my_access", doctype="User", actions=["read"], docname=None)), guard.NOT_ALLOWED_DOCTYPE)
+		self.assertEqual(
+			self.error(self.call("check_my_access", doctype="User", actions=["read"], docname=None)),
+			guard.NOT_ALLOWED_DOCTYPE,
+		)
 
 	def test_roles_come_from_docperm_and_custom_docperm(self):
 		frappe.set_user("Administrator")
@@ -114,7 +145,9 @@ class TestCheckMyAccess(ToolTestCase):
 
 	def data_as(self, who, doctype):
 		self.as_user(who)
-		return self.data(self.call("check_my_access", doctype=doctype, actions=["read", "delete"], docname=None))
+		return self.data(
+			self.call("check_my_access", doctype=doctype, actions=["read", "delete"], docname=None)
+		)
 
 
 class TestFindRecords(ToolTestCase):
@@ -147,12 +180,49 @@ class TestFindRecords(ToolTestCase):
 		self.assertTrue(all(0 <= r["docstatus"] <= 1 for r in data["rows"]))
 
 	def test_in_not_in_between_is_and_like(self):
-		self.assertTrue(self.data(find(self, filters=[{"field": "loan_product", "operator": "in", "value": None, "values": ["PL-EMI", "x"]}]))["rows"])
-		rows = self.data(find(self, filters=[{"field": "loan_product", "operator": "not in", "value": None, "values": ["PL-EMI"]}]))["rows"]
+		self.assertTrue(
+			self.data(
+				find(
+					self,
+					filters=[
+						{"field": "loan_product", "operator": "in", "value": None, "values": ["PL-EMI", "x"]}
+					],
+				)
+			)["rows"]
+		)
+		rows = self.data(
+			find(
+				self,
+				filters=[
+					{"field": "loan_product", "operator": "not in", "value": None, "values": ["PL-EMI"]}
+				],
+			)
+		)["rows"]
 		self.assertTrue(all(r["loan_product"] != "PL-EMI" for r in rows))
-		self.assertTrue(self.data(find(self, filters=[{"field": "docstatus", "operator": "between", "value": None, "values": [0, 1]}]))["rows"])
-		self.assertTrue(self.data(find(self, filters=[{"field": "loan_product", "operator": "is", "value": "set", "values": None}]))["rows"])
-		self.assertTrue(self.data(find(self, filters=[{"field": "name", "operator": "like", "value": "ACC-LOAN%", "values": None}]))["rows"])
+		self.assertTrue(
+			self.data(
+				find(
+					self,
+					filters=[{"field": "docstatus", "operator": "between", "value": None, "values": [0, 1]}],
+				)
+			)["rows"]
+		)
+		self.assertTrue(
+			self.data(
+				find(
+					self,
+					filters=[{"field": "loan_product", "operator": "is", "value": "set", "values": None}],
+				)
+			)["rows"]
+		)
+		self.assertTrue(
+			self.data(
+				find(
+					self,
+					filters=[{"field": "name", "operator": "like", "value": "ACC-LOAN%", "values": None}],
+				)
+			)["rows"]
+		)
 
 	def test_bad_filters_are_refused(self):
 		def one(**overrides):
@@ -163,7 +233,9 @@ class TestFindRecords(ToolTestCase):
 		self.assertIn("takes", self.error(one(operator="in")))  # in without values
 		self.assertIn("takes", self.error(one(operator="=", values=["a"])))  # = with values
 		self.assertIn("takes", self.error(one(operator="=", value=None)))
-		self.assertIn("too many", self.error(one(operator="in", value=None, values=[str(i) for i in range(51)])))
+		self.assertIn(
+			"too many", self.error(one(operator="in", value=None, values=[str(i) for i in range(51)]))
+		)
 		self.assertIn("two values", self.error(one(operator="between", value=None, values=["a"])))
 		self.assertIn("short text", self.error(one(operator="like", value="x" * 101)))
 		self.assertIn("set", self.error(one(operator="is", value="maybe")))
@@ -201,4 +273,7 @@ class TestGetRecord(ToolTestCase):
 
 	def test_a_doctype_off_the_allowlist_is_refused(self):
 		self.as_user("senior")
-		self.assertEqual(self.error(self.call("get_record", doctype="User", name="Administrator")), guard.NOT_ALLOWED_DOCTYPE)
+		self.assertEqual(
+			self.error(self.call("get_record", doctype="User", name="Administrator")),
+			guard.NOT_ALLOWED_DOCTYPE,
+		)

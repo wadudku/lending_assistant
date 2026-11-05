@@ -77,6 +77,23 @@ class TestLookup(AssistantTestCase):
 		self.assertEqual(retrieve.extract_keys("What is D3 about?")["dev_item"], ["D3"])
 		self.assertNotIn("devitem.D3", [item["id"] for item in retrieve.retrieve("What does D3 in BRD section 12 mean?")][:1])
 
+	def test_no_devitem_card_in_the_top_3_of_a_brd_dependency_question(self):
+		"""#103 in retrieve, every stage: quoted text, a cue far away, and search results too."""
+		quoted = "The BRD dependencies table (page 40, last row) reads: 'D4 Bangladesh Bank CIB access to be arranged by the bank'. Explain."
+		far = "In the long table at the very end of the document there is a row for D4 Bangladesh Bank CIB access, so what is it about, and the risk?"
+		nocue_quote = "The table says 'D4 Bangladesh Bank CIB access to be arranged' and what does that line mean for us?"
+		for question in (quoted, far, nocue_quote, "What does dependency D4 in the BRD mean?", "Tell me about D4 and D19 as dependencies."):
+			with self.subTest(question=question[:50]):
+				detail = retrieve.retrieve_detail(question)
+				self.assertEqual(detail["keys"]["dev_item"], [])
+				self.assertFalse([i["id"] for i in detail["top"] if i["id"].startswith("devitem.")], detail["top"])
+		self.assertEqual(retrieve.retrieve_detail("What will dev item D4 build?")["top"][0]["id"], "devitem.D4")
+		self.assertEqual(retrieve.retrieve_detail("What will D4 build?")["top"][0]["id"], "devitem.D4")
+		# an explicit dev item is honoured even beside a BRD word
+		self.assertEqual(retrieve.extract_keys("Which BRD dependency does dev item D4 cover?")["dev_item"], ["D4"])
+		# never from quoted text, even if it says dev item
+		self.assertEqual(retrieve.extract_keys("The note says 'dev item D4 is late'. What is that?")["dev_item"], [])
+
 	def test_unknown_or_hostile_input_gives_nothing(self):
 		for kw in (
 			{"br_id": "BR-LMS-999"}, {"br_id": "nonsense"}, {"br_id": 5}, {"brd_section": "99.9"}, {"brd_section": "../x"},

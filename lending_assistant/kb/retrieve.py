@@ -57,11 +57,11 @@ ACTION_WORDS = [
 INTENTS = [
 	(r"\bhow (?:do|can|should|would|could) (?:i|we|you|someone|a|an|the)\b|\bhow to\b|\bsteps?\b|\bwhere do i (?:click|go)\b", {"howto": 25}),
 	(r"\bwhat (?:is|are|does) (?:a|an|the)?\s*\w+(?: \w+)? (?:mean|stand)|\bwhat (?:is|are) (?:a|an|the)\b|\bstands? for\b|\bdefin(?:e|ition)\b|\bwhat does \S+ mean\b", {"glossary": 20, "lifecycle": 15, "concept": 10}),
-	(r"\bcovered\b|\bgap\b|\bverdict\b|\bdoes (?:frappe|lending|the app|the system)\b|\bhow does frappe\b|\bsupport(?:s|ed)?\b|\bmatch(?:es)?\b|\bmissing\b|\bwhy (?:can'?t|cannot|doesn'?t|does not|isn'?t|is not|won'?t)\b|\bwhy is\b.*\bgap\b", {"bridge": 25}),
+	(r"\bcovered\b|\bgap\b|\bverdict\b|\bdoes (?:frappe|lending|the app|the system)\b|\bhow does frappe\b|\bsupport(?:s|ed)?\b|\bmatch(?:es)?\b|\bmissing\b|\bwhy (?:can'?t|cannot|doesn'?t|does not|isn'?t|is not|won'?t)\b", {"bridge": 25}),
 	(r"\bwhat does the brd\b|\bwhy does the (?:bank|brd|nrb)\b|\bsummari[sz]e\b|\bwhich requirements\b|\bwhat is in section\b|\bwhat does section\b", {"concept": 15, "brd_section": 25}),
 	(r"\bplanned\b|\bwhat are we building\b|\bdev(?:elopment)? items?\b|\bbuild for\b|\bto build\b|\bwe build\b|\bproposed\b|\bfix\b", {"devitem": 25}),
-	(r"\bend[- ]to[- ]end\b|\bwhole process\b|\bwalk me through\b|\bstages?\b|\bjourney\b|\bover the life\b|\bfrom start to finish\b", {"journey": 25}),
-	(r"\bwho approves\b|\ballowed to\b|\boptions? for\b|\bcompared with\b|\bdifference between\b|\bversus\b|\bvs\.?\b", {"decision": 20}),
+	(r"\bend[- ]to[- ]end\b|\bwhole process\b|\bwalk me through\b|\bstages?\b|\bjourney\b|\bfrom start to finish\b", {"journey": 25}),
+	(r"\bwho approves\b|\ballowed to\b|\boptions? for\b|\bdifference between\b|\bversus\b|\bvs\.?\b", {"decision": 20}),
 	(r"\bscreen\b|\bform\b|\bpage\b|\bwhat am i looking at\b|\bthis (?:record|document)\b|\bwhat is this\b|\bwhat do (?:its|the) \w+ fields\b", {"screen": 25}),
 	(r"\b(?:state|status|stage)\b", {"lifecycle": 15}),
 ]  # fmt: skip
@@ -91,7 +91,7 @@ def _words(text: str) -> list[str]:
 # --- key extraction ----------------------------------------------------------------------------------------------------
 
 
-def _doctypes(text: str, st) -> tuple[list[str], str]:
+def _doctypes(text: str, st) -> tuple[list[str], list[str], str]:
 	"""Doctype names written in the question, longest first. Returns (names, weak mentions, text with spans blanked)."""
 	spaced = _sep(text)
 	found, weak = [], []
@@ -145,10 +145,26 @@ def _terms(original: str, blanked: str, st) -> list[str]:
 	return found
 
 
-def _near_dev_cue(text: str, start: int, end: int) -> bool:
-	before = " ".join(text[:start].split()[-6:])
-	after = " ".join(text[end:].split()[:6])
-	return bool(_DEV_NOT.search(before + " " + after))
+_QUOTED = re.compile(r"(?<![A-Za-z0-9])'[^']*'(?![A-Za-z0-9])|\"[^\"]*\"|\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019")
+
+
+def _quoted_spans(text: str) -> list[tuple[int, int]]:
+	return [(m.start(), m.end()) for m in _QUOTED.finditer(text)]
+
+
+def _in_spans(spans, start: int) -> bool:
+	return any(a <= start < b for a, b in spans)
+
+
+def brd_context(text: str) -> bool:
+	"""#103: a BRD-dependency cue word anywhere in the question. Then a bare "D<n>" is the BRD's own numbering."""
+	return bool(_DEV_NOT.search(text))
+
+
+def names_dev_item(text: str) -> bool:
+	"""The question names a dev item outright ("dev item 4", "development item D4"), outside any quotes."""
+	spans = _quoted_spans(text)
+	return any(not _in_spans(spans, m.start()) for m in _DEV_NAMED.finditer(text))
 
 
 def extract_keys(question: str, route_doctype=None, st=None) -> dict:
@@ -168,7 +184,7 @@ def extract_keys(question: str, route_doctype=None, st=None) -> dict:
 	for match in _BR_BARE.finditer(original):
 		for key in lookup.normalise_br_id(f"{match.group(1)}{(match.group(2) or '').lower()}", st):
 			push("br_id", key)
-	sections = by_section = st.map("by_brd_section")
+	by_section = st.map("by_brd_section")
 	for match in _SECTION_WORD.finditer(original):
 		push("section", match.group(1))
 	for match in _SECTION_DOTTED.finditer(original):
@@ -177,11 +193,14 @@ def extract_keys(question: str, route_doctype=None, st=None) -> dict:
 	for match in _JOURNEY.finditer(original):
 		key = lookup.normalise_journey("J" + (match.group(1) or match.group(2)), st)
 		push("journey", key)
+	quoted = _quoted_spans(original)
 	for match in _DEV_NAMED.finditer(original):
-		push("dev_item", lookup.normalise_dev_item(match.group(1)))
-	for match in _DEV_BARE.finditer(original):
-		if not _near_dev_cue(original, match.start(), match.end()):
+		if not _in_spans(quoted, match.start()):
 			push("dev_item", lookup.normalise_dev_item(match.group(1)))
+	if not brd_context(original):  # #103: with a BRD cue anywhere, or inside quotes, "D<n>" is not a dev item
+		for match in _DEV_BARE.finditer(original):
+			if not _in_spans(quoted, match.start()):
+				push("dev_item", lookup.normalise_dev_item(match.group(1)))
 
 	named, weak, blanked = _doctypes(original, st)
 	for name in named:
@@ -240,6 +259,10 @@ def retrieve_detail(question, route_doctype=None, depth=None, st=None) -> dict:
 	text_scores = search.bm25_scores(_normal(question), st)
 	points = lookup.score_keys(st, keys)
 	ordered = lookup.rank(st, points, tilt, text_scores)
+	normal = _normal(question)
+	if brd_context(normal) and not names_dev_item(normal):  # #103: no devitem card, from lookup or search
+		ordered = [cid for cid in ordered if st.cards[cid]["type"] != "devitem"]
+		text_scores = {cid: sc for cid, sc in text_scores.items() if st.cards[cid]["type"] != "devitem"}
 	top = [{"id": cid, "method": "lookup", "score": points[cid] + tilt.get(st.cards[cid]["type"], 0)} for cid in ordered[:TOP]]
 	doctype_only = bool(ordered) and not any(keys[name] for name in STRONG)
 	if doctype_only:

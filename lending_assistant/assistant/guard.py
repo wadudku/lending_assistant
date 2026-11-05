@@ -29,7 +29,7 @@ from frappe.model import get_permitted_fields
 from lending_assistant.assistant import settings
 
 SOURCE_LIVE = "live_site"
-SOURCES = (SOURCE_LIVE, "code")
+SOURCES = (SOURCE_LIVE, "code", "analysis")  # "analysis": the approved knowledge cards (M3b)
 
 NOT_FOUND = "I can't find a record with that ID that you have access to."  # G4, one wording for both cases
 READ_ONLY_MESSAGE = "The assistant can only read."
@@ -477,7 +477,7 @@ def as_data(payload, source: str = SOURCE_LIVE) -> str:
 
 def unwrap(envelope: str) -> dict:
 	"""Parse an envelope back into a dict (tests, and internal callers)."""
-	match = re.fullmatch(r'<data source="(live_site|code)">(.*)</data>', envelope, re.DOTALL)
+	match = re.fullmatch(r'<data source="(live_site|code|analysis)">(.*)</data>', envelope, re.DOTALL)
 	if not match:
 		raise AssistantGuardError("Not a data envelope.")
 	return json.loads(match.group(2))

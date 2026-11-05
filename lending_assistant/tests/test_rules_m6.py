@@ -17,14 +17,18 @@ class TestFindingRules(AssistantTestCase):
 		self.assertIsNone(finding_rules.canonical_br_id("<script>"))
 
 	def test_check_br_ids_names_every_unknown_one(self):
-		self.assertEqual(finding_rules.check_br_ids("BR-LMS-162\nbr-lms-162\n\nBR-LMS-170c"), ["BR-LMS-162", "BR-LMS-170c"])
+		self.assertEqual(
+			finding_rules.check_br_ids("BR-LMS-162\nbr-lms-162\n\nBR-LMS-170c"), ["BR-LMS-162", "BR-LMS-170c"]
+		)
 		with self.assertRaises(Exception) as ctx:
 			finding_rules.check_br_ids(["BR-LMS-162", "BR-LMS-999", "X-1"])
 		self.assertIn("BR-LMS-999", str(ctx.exception))
 		self.assertIn("X-1", str(ctx.exception))
 
 	def test_check_doctypes(self):
-		self.assertEqual(finding_rules.check_doctypes(["Loan", "Loan Repayment", "Loan"]), ["Loan", "Loan Repayment"])
+		self.assertEqual(
+			finding_rules.check_doctypes(["Loan", "Loan Repayment", "Loan"]), ["Loan", "Loan Repayment"]
+		)
 		with self.assertRaises(Exception) as ctx:
 			finding_rules.check_doctypes("Loan\nNo Such Doctype")
 		self.assertIn("No Such Doctype", str(ctx.exception))

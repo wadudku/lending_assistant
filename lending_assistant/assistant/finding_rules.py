@@ -11,7 +11,7 @@ from lending_assistant.kb import lookup as kb_lookup
 from lending_assistant.kb import store, validate
 
 MAX_REFS = 10
-BR_FORM = re.compile(r"^BR-([A-Za-z]+)-(\d{1,3})([A-Za-z]?)$")
+BR_FORM = re.compile(r"^BR-([A-Za-z]+)-(\d{1,3})([A-Za-z]?)$", re.IGNORECASE)
 
 
 def lines(text) -> list[str]:
@@ -23,9 +23,10 @@ def lines(text) -> list[str]:
 def canonical_br_id(value) -> str | None:
 	"""`BR-LMS-162` for a full BR id the knowledge base knows (also 170r / 170c, which are card ids only), else None.
 	A bare number is not accepted: a finding must name the requirement unambiguously (D1)."""
-	text = str(value or "").strip()
-	if not BR_FORM.match(text):
+	match = BR_FORM.match(str(value or "").strip())
+	if not match:
 		return None
+	text = f"BR-{match.group(1).upper()}-{match.group(2)}{match.group(3).lower()}"
 	keys = kb_lookup.normalise_br_id(text)
 	return keys[0] if len(keys) == 1 else None
 

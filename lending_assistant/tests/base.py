@@ -88,7 +88,11 @@ class AssistantTestCase(IntegrationTestCase):
 	def clear_rate_limits(self):
 		for window in (3600, 60, 10):
 			for email in [*PERSONAS.values(), SYSMGR]:
-				for prefix in (ratelimit.USER_PREFIX, ratelimit.FEEDBACK_PREFIX):
+				for prefix in (
+					ratelimit.USER_PREFIX,
+					ratelimit.FEEDBACK_PREFIX,
+					getattr(ratelimit, "FINDING_PREFIX", "ast:rl:af"),
+				):
 					frappe.cache.delete(ratelimit.key_for(prefix, email, window))
 			# the IP layer counts every accepted call: tests run without a request, so the IP is "unknown"
 			for ip in ("unknown", TEST_IP):
@@ -262,3 +266,33 @@ class ToolTestCase(GuardTestCase):
 			},
 		}
 		return registry._entry(function, schema, needs_switch, source)
+
+
+FINDING = "Assistant Finding"
+
+
+def make_finding(owner, **values):
+	"""Insert a finding as `owner` (a persona key or email), the way `findings.py` does: no create role, so
+	`ignore_permissions`. Test setup only. Returns the document."""
+	user = frappe.session.user
+	frappe.set_user(PERSONAS.get(owner, owner))
+	try:
+		data = {
+			"doctype": FINDING,
+			"title": "AST-M6 finding",
+			"summary": "AST-M6 summary",
+			"status": "Draft",
+			"br_ids": "BR-LMS-162",
+			"doctypes": "Loan Repayment",
+			"question": "AST-M6 question?",
+			"sources": '["Analysis"]',
+			"cards_used": "[]",
+			"cards_basis": "read",
+			"lending_version": "16.5.1",
+			"author_name": "AST Author",
+			"source_message": "",
+		}
+		data.update(values)
+		return frappe.get_doc(data).insert(ignore_permissions=True)
+	finally:
+		frappe.set_user(user)

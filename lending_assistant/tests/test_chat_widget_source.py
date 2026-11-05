@@ -72,9 +72,9 @@ class TestChatWidgetSource(unittest.TestCase):
 
 	def test_widget_calls_only_ask_feedback_and_the_client_list_api(self):
 		code = js_code()
-		methods = set(re.findall(r'method:\s*"([^"]+)"', code)) | set(
-			re.findall(r'const (?:ASK|FEEDBACK|LIST) = "([^"]+)"', code)
-		)
+		self.assertEqual(code.count("fetch("), 1)  # the one POST helper, used for ask and feedback only
+		self.assertEqual(code.count("post(ASK") + code.count("post(FEEDBACK"), 2)
+		methods = set(re.findall(r'const (?:ASK|FEEDBACK|LIST) = "([^"]+)"', code))
 		self.assertEqual(
 			methods,
 			{

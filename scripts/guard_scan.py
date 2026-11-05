@@ -55,6 +55,10 @@ MARKER = re.compile(r"(?:#|//)\s*AST-ALLOWED:(.*)$")
 
 # --- where a marker is accepted ----------------------------------------------------------------------------------------
 # Which files may carry a marked line for each named rule. A rule absent here, or with (), has no allowed file at all.
+# M3b: the only knowledge-base modules that touch files. store.py and validate.py read; ingest.py reads and writes,
+# and only inside its two destination folders (checked in code and by a test). lookup, search, retrieve and
+# assistant/tools/knowledge.py are pure and get no allowance (DECISIONS #138 Q1).
+KB_FILES = ("kb/store.py", "kb/ingest.py", "kb/validate.py")
 OWN_WRITERS = ("assistant/audit.py", "assistant/findings.py", "install.py", "patches/")
 GUARD = "assistant/guard.py"
 ALLOWED = {
@@ -69,7 +73,7 @@ ALLOWED = {
 	"user-switch": (GUARD,),  # the run-time identity layer restores user, session and connection (M2b-R8)
 	"flags": (GUARD,),  # frappe.flags: only the two helpers in guard.py
 	"secrets": ("install.py", "assistant/settings.py"),  # frappe.conf, get_site_config, get_password
-	"file-access": ("assistant/codereader.py",),
+	"file-access": ("assistant/codereader.py", *KB_FILES),  # the three kb files are also scoped by function, see SCOPES
 	"db-other": (),  # any frappe.db.<attr> that is not read, write or one of the transaction lines
 	"qb": (),
 	"client-api": (),  # frappe.client.* / frappe.desk.*: whole documents, no never-send or Password filter (G3)
@@ -97,7 +101,13 @@ SCOPES = {
 		"txn-control": (*IDENTITY_FUNCS, "read_only_tool_context"),
 		"callbacks": ("_snapshot_callbacks", "_restore_callbacks"),
 		"flags": ("_ast_flag", "_set_ast_flag", "_capture_identity", "_restore_identity", "_restore_flag_values"),
-	}
+	},
+	# M3b: a marker for file access is accepted only inside these helpers, each with one open() call. A marker for
+	# get_meta (rule not-allowed) is accepted only inside validate._meta_of. lookup, search, retrieve and
+	# assistant/tools/knowledge.py have no allowance at all (see KB_FILES / ALLOWED).
+	"kb/store.py": {"file-access": ("_read_text",)},
+	"kb/ingest.py": {"file-access": ("_read_bytes", "_write_bytes", "_list_dir")},
+	"kb/validate.py": {"file-access": ("_read_text",), "not-allowed": ("_meta_of",)},
 }
 
 # --- (B) the chain allowlist -------------------------------------------------------------------------------------------
@@ -129,7 +139,7 @@ ALLOWLIST = [
 	("frappe.cache.*", ("assistant/ratelimit.py",), "call", False),
 	("frappe.local.request_ip", ("api/chat.py",), "read", False),
 	# marked lines only. get_meta returns a live Meta (a Document): tool code gets meta facts from guard/access helpers
-	("frappe.get_meta", (GUARD, "assistant/access.py", "install.py"), "call", True),
+	("frappe.get_meta", (GUARD, "assistant/access.py", "install.py", "kb/validate.py"), "call", True),
 	("frappe.flags.*", (GUARD,), "any", True),
 	("frappe.local.message_log", (GUARD,), "any", True),
 	("frappe.log_error", (GUARD,), "call", True),

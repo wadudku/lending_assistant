@@ -398,7 +398,12 @@ frappe.provide("lending_assistant");
 			request_id++; // a late answer is ignored
 			abort.abort();
 			finish();
-			add_line("error", __("The advisor took too long. The answer may still have been saved: open History."));
+			add_line(
+				"error",
+				conversation
+					? __("The advisor took too long. The answer may still have been saved: open History.")
+					: __("The advisor took too long. The answer may still have been saved: open History. Your next question starts a new conversation.")
+			);
 		}, CLIENT_TIMEOUT_MS);
 
 		post(ASK, args, abort.signal)

@@ -90,7 +90,7 @@ class TestStopReasons(OrchTestCase):
 			cf.tool_use(f"t{i}", "get_screen_help", {"doctype": "Loan", "search": None}) for i in range(3)
 		]
 		script = [cf.response("tool_use", *uses), cf.response("end_turn", cf.text(LABELLED))]
-		result, client = self.go(script, dispatch=lambda n, a=None: ok("live_site", doctype="Loan"))
+		_, client = self.go(script, dispatch=lambda n, a=None: ok("live_site", doctype="Loan"))
 		last = client.calls[1]["messages"][-1]
 		self.assertEqual(last["role"], "user")
 		self.assertEqual([b["tool_use_id"] for b in last["content"]], ["t0", "t1", "t2"])
@@ -134,7 +134,7 @@ class TestStopReasons(OrchTestCase):
 			cf.response("max_tokens", cf.text("Half an ans"), cf.tool_use("t1", "get_card", {"card_id": "x"}))
 		]
 		dispatched = mock.Mock()
-		result, client = self.go(script, dispatch=dispatched)
+		result, _ = self.go(script, dispatch=dispatched)
 		dispatched.assert_not_called()
 		self.assertEqual(result["status"], "limited")
 		self.assertTrue(result["answer"].startswith("Half an ans"))
@@ -198,10 +198,10 @@ class TestLimits(OrchTestCase):
 		self.assertEqual(client.retries, [1, 0])
 
 	def test_timeouts_and_retries_follow_the_budget(self):
-		result, client = self.go([cf.response("end_turn", cf.text(LABELLED))])
+		_, client = self.go([cf.response("end_turn", cf.text(LABELLED))])
 		self.assertEqual(client.calls[0]["timeout"], (90 - 25) / 2)
 		self.assertEqual(client.retries, [1])
-		result, client = self.go([cf.response("end_turn", cf.text(LABELLED))], deep=1)
+		_, client = self.go([cf.response("end_turn", cf.text(LABELLED))], deep=1)
 		self.assertEqual(client.calls[0]["timeout"], 37.5)
 		self.assertEqual(client.retries, [1])
 
@@ -347,7 +347,7 @@ class TestReplay(OrchTestCase):
 
 	def test_a_fallback_before_any_output_changes_nothing(self):
 		first = cf.response("end_turn", cf.fallback_block(), cf.text(LABELLED), model="claude-sonnet-5")
-		result, client = self.go([first])
+		result, _ = self.go([first])
 		self.assertEqual(result["model"], "claude-sonnet-5")  # the model that served it
 		self.assertEqual(result["status"], "ok")
 
@@ -440,7 +440,7 @@ class TestAudit(OrchTestCase):
 
 	def test_nothing_secret_is_in_the_result(self):
 		script = [cf.response("end_turn", cf.thinking("private chain of thought"), cf.text(LABELLED))]
-		result, client = self.go(script)
+		result, _ = self.go(script)
 		blob = json.dumps(result, default=str)
 		for secret in (cf.FAKE_KEY, "private chain of thought", prompts.STABLE_PROMPT[:80]):
 			self.assertNotIn(secret, blob)
@@ -459,7 +459,7 @@ class TestInjectionAndLabels(OrchTestCase):
 			cf.response("tool_use", cf.tool_use("t1", "get_record", {"doctype": "Loan", "name": "L"})),
 			cf.response("end_turn", cf.text(LABELLED)),
 		]
-		result, client = self.go(script, dispatch=fake)
+		_, client = self.go(script, dispatch=fake)
 		self.assertEqual(
 			seen, [("get_record", {"doctype": "Loan", "name": "L"})]
 		)  # the script's sequence, nothing else

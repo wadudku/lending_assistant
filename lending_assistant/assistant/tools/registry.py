@@ -177,13 +177,23 @@ def validate_args(schema: dict, args, tool: str = "") -> dict:
 
 
 def _logger():
-	return frappe.logger("lending_assistant_tools")
+	"""Frappe's default level is WARNING under the dev server and ERROR otherwise (and under the test runner), which would
+	drop refusals. Lower this one logger to WARNING so they are written (M4a-R2); it never goes higher than Frappe's."""
+	logger = frappe.logger("lending_assistant_tools")
+	if logger.level > 30:  # 30 is logging.WARNING
+		logger.setLevel(30)
+	return logger
 
 
 def _log(kind: str, tool: str):
-	"""Tool name and kind only: never an argument or a value (G10)."""
+	"""User, tool name and kind only: never an argument or a value (G8, G10).
+
+	Refusals go out at `warning` and internal errors at `error`: Frappe's logger drops `info` (its level is WARNING under
+	the dev server and ERROR otherwise), so an `info` line never reached the file (M4a-R2).
+	"""
 	try:
-		_logger().info(f"user={frappe.session.user} tool={tool or '(unknown)'} {kind}")
+		level = _logger().error if kind == "internal_error" else _logger().warning
+		level(f"user={frappe.session.user} tool={tool or '(unknown)'} {kind}")
 	except Exception:
 		pass  # logging must never hide the tool's own result or error
 
@@ -212,7 +222,12 @@ def _switch_message(switch):
 def _check_envelope(envelope, tool: str, source: str) -> str:
 	if not isinstance(envelope, str):
 		envelope = guard.as_data(envelope, source)  # a dict result is wrapped here
-	payload = guard.unwrap(envelope)  # raises AssistantGuardError if it is not one envelope
+	try:
+		payload = guard.unwrap(envelope)  # raises AssistantGuardError if it is not one envelope
+	except ValueError as exc:  # json.JSONDecodeError: two envelopes joined, or text that is not JSON (M4a-R5)
+		raise guard.AssistantGuardError(
+			f"Tool {tool} returned a result that is not one data envelope."
+		) from exc
 	if not envelope.startswith(f'<data source="{source}">') or payload.get("source") != source:
 		raise guard.AssistantGuardError(f"Tool {tool} returned a result with the wrong source label.")
 	if len(envelope) > guard.MAX_CHARS:

@@ -2,7 +2,6 @@
 
 import json
 
-
 import frappe
 import frappe.desk.form.save
 

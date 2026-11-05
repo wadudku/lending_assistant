@@ -1,4 +1,5 @@
 """Audit log writer (G10). One of the only two modules allowed to write (the other is findings.py, M6).
+It also records the finding the advisor suggested (`finding_suggestion`); the suggestion writes no finding.
 
 It writes Assistant Conversation and Assistant Message rows, nothing else. The rows are created while
 the session user is the logged-in user, so `owner` is that user and the `if_owner` permission works.
@@ -70,6 +71,7 @@ def log_exchange(
 	code_files_read: list | None = None,
 	cards_used: list | None = None,
 	web_sources: list | None = None,
+	finding_suggestion: dict | None = None,
 ) -> str:
 	"""Write one Assistant Message (one exchange) and update its conversation. Returns the message name."""
 	message = frappe.new_doc(MESSAGE)  # AST-ALLOWED: app's own audit log
@@ -95,6 +97,7 @@ def log_exchange(
 			"code_files_read": _json(code_files_read),
 			"cards_used": _json(cards_used),
 			"web_sources": _json(web_sources),
+			"finding_suggestion": _json(finding_suggestion),
 		}
 	)
 	message.insert(ignore_permissions=True)  # AST-ALLOWED: app's own audit log

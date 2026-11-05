@@ -67,7 +67,7 @@ ALLOWED = {
 	"write": OWN_WRITERS,
 	"ignore-permissions": OWN_WRITERS,
 	"get-doc": (*OWN_WRITERS, GUARD, "assistant/settings.py"),
-	"get-list": (GUARD, "api/chat.py"),
+	"get-list": (GUARD, "api/chat.py", "api/gate.py"),
 	"db-read": ("install.py",),
 	"txn-control": (GUARD,),
 	"callbacks": (GUARD,),  # frappe.db.before/after_commit/rollback and their _functions
@@ -92,6 +92,7 @@ ALLOWED = {
 	"not-allowed": (),  # (B) a frappe chain that is on no allowlist entry
 	"import": (),  # (C) an import that is on no allowlist entry
 	"network-import": (),  # (C) socket, requests, urllib, http, sqlite3, pymysql, MySQLdb, httpx...: never, in any file
+	"findings-import": (),  # (J) assistant/findings.py imported by anything but api/findings.py (M6, G13)
 	"app-api": (),  # (H) one app module reaching another module's private or unlisted names (M2b-R11)
 	"controller-import": (),  # (I) a doctype controller class imported outside doctype/ (M2b-R12)
 }
@@ -211,6 +212,7 @@ _PLAIN_IMPORTS = {
 	"assistant/tools/registry.py": ("json",),
 	"assistant/orchestrator.py": ("time",),
 	"assistant/finding_rules.py": ("json", "re"),
+	"assistant/findings.py": ("json",),
 }
 _FROM_IMPORTS = {
 	GUARD: (
@@ -284,6 +286,8 @@ APP_API = {
 	f"{ASSISTANT}.audit": set(),
 	f"{ASSISTANT}.ratelimit": set(),
 	f"{ASSISTANT}.finding_rules": set(),
+	f"{ASSISTANT}.findings": set(),  # M6: importable from api/findings.py only (rule findings-import)
+	f"{PACKAGE}.api.gate": set(),
 	f"{PACKAGE}.install": set(),
 	# M3b knowledge base: pure functions over the ingested files. Only names that some module imports are listed.
 	f"{PACKAGE}.kb.store": {"CARD_ID", "TYPES", "parse_front_matter", "reset_cache", "load", "get_card"},
@@ -414,6 +418,15 @@ APP_GRANTS = [
 		(f"{ASSISTANT}.finding_rules", name, ("**/doctype/",), False)
 		for name in ("check_br_ids", "check_doctypes", "parse_json_list", "stale_reasons")
 	],
+	*[
+		(f"{PACKAGE}.api.gate", name, ("api/chat.py", "api/findings.py"), False)
+		for name in ("require_assistant_user", "require_enabled", "too_many", "own_record")
+	],
+	(f"{ASSISTANT}.findings", "create_from_message", ("api/findings.py",), False),
+	(f"{ASSISTANT}.finding_rules", "installed_lending_version", ("api/findings.py",), False),
+	(f"{ASSISTANT}.audit", "MESSAGE", ("api/findings.py", "assistant/findings.py"), False),
+	(f"{ASSISTANT}.ratelimit", "exceeded", ("api/findings.py",), False),
+	(f"{ASSISTANT}.ratelimit", "FINDING_PREFIX", ("api/findings.py",), False),
 	(f"{PACKAGE}.kb.validate", "doctype_exists", ("assistant/finding_rules.py",), False),
 	(f"{PACKAGE}.kb.validate", "installed_lending_version", ("assistant/finding_rules.py",), False),
 	(f"{PACKAGE}.install", "seed_defaults", ("patches/",), False),
@@ -990,6 +1003,16 @@ class Scanner(ast.NodeVisitor):
 	def judge_app_import(self, node, full: str):
 		"""`import a.b` / `from a import b`: a module may be imported; an unknown module, or a private or unlisted
 		name, is a hit on the import line too (uses are judged where they happen)."""
+		findings = f"{ASSISTANT}.findings"
+		if (full == findings or full.startswith(findings + ".")) and not file_ok(
+			self.rel, ("api/findings.py", "assistant/findings.py")
+		):
+			self.hit(
+				node,
+				"findings-import",
+				f"{full}: assistant/findings.py is reachable only from api/findings.save (J)",
+			)
+			return
 		if full in APP_API or full == self.own_module():
 			return
 		module, rest = app_target(full)

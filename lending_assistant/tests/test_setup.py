@@ -6,6 +6,7 @@ from frappe.utils.password import set_encrypted_password
 
 from lending_assistant import install
 from lending_assistant.api import chat
+from lending_assistant.api import findings as findings_api
 from lending_assistant.assistant import settings as settings_module
 from lending_assistant.tests.base import AssistantTestCase
 
@@ -146,8 +147,8 @@ class TestSetup(AssistantTestCase):
 		frappe.set_user("Administrator")
 		self.assertTrue(frappe.has_permission("Assistant Settings", "read"))
 
-	def test_only_two_whitelisted_methods(self):
-		"""G7: only chat.ask and chat.feedback are whitelisted (findings.save comes in M6)."""
+	def test_only_three_whitelisted_methods(self):
+		"""G7: only chat.ask, chat.feedback and findings.save are whitelisted."""
 		found = []
 		for path in APP_DIR.rglob("*.py"):
 			if "tests" in path.relative_to(APP_DIR).parts:
@@ -160,8 +161,9 @@ class TestSetup(AssistantTestCase):
 			[
 				("api/chat.py", '@frappe.whitelist(methods=["POST"])'),
 				("api/chat.py", '@frappe.whitelist(methods=["POST"])'),
+				("api/findings.py", '@frappe.whitelist(methods=["POST"])'),
 			],
 		)
-		for fn in (chat.ask, chat.feedback):
+		for fn in (chat.ask, chat.feedback, findings_api.save):
 			self.assertEqual(frappe.allowed_http_methods_for_whitelisted_func[fn], ["POST"])
 			self.assertNotIn(fn, frappe.guest_methods)

@@ -5,13 +5,14 @@ EXPIRE is set when the result is 1 or when the key has no expiry at all. So a ke
 a TTL: even if a process dies between INCR and EXPIRE, the next call heals it. (The old read -> setex ->
 incrby order could recreate a key without a TTL, which locked the user out for good.)
 
-Used for three buckets: per-user `ask`, per-user `feedback`, and the IP layer of `ask`.
+Used for four buckets: per-user `ask`, `feedback` and finding `save`, and the IP layer of `ask`.
 """
 
 import frappe
 
 USER_PREFIX = "ast:rl"
 FEEDBACK_PREFIX = "ast:rl:fb"
+FINDING_PREFIX = "ast:rl:af"
 IP_PREFIX = "ast:rl:ip"
 
 

@@ -91,7 +91,7 @@ class AssistantTestCase(IntegrationTestCase):
 				for prefix in (
 					ratelimit.USER_PREFIX,
 					ratelimit.FEEDBACK_PREFIX,
-					getattr(ratelimit, "FINDING_PREFIX", "ast:rl:af"),
+					ratelimit.FINDING_PREFIX,
 				):
 					frappe.cache.delete(ratelimit.key_for(prefix, email, window))
 			# the IP layer counts every accepted call: tests run without a request, so the IP is "unknown"

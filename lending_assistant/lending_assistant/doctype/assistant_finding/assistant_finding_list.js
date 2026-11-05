@@ -78,7 +78,9 @@
 		add_fields: ["status"],
 		get_indicator: (doc) => [__(doc.status), doc.status === "Confirmed" ? "green" : "gray", "status,=," + doc.status],
 		onload: function (listview) {
+			// the inner button is hidden on narrow screens, so the same action is also in the Menu
 			listview.page.add_inner_button(__("Export to Markdown"), () => export_markdown(listview));
+			listview.page.add_menu_item(__("Export to Markdown"), () => export_markdown(listview), true);
 		},
 	};
 })();

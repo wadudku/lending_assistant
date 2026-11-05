@@ -79,7 +79,7 @@ frappe.provide("lending_assistant");
 			return null;
 		}
 		if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-		if (!href.startsWith("/") && url.origin !== window.location.origin) return href;
+		if (!href.startsWith("/") && url.hostname !== window.location.hostname) return href;
 		if (href.startsWith("//")) return null;
 		const path = url.pathname;
 		if (/\.\.|%2e|%2f|%5c|\/\/|\/\.(\/|$)/i.test(path)) return null;

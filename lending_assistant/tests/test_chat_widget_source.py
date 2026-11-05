@@ -177,4 +177,4 @@ class TestFindingsWidget(unittest.TestCase):
 		body = code[begin:end]
 		self.assertIn('"/app"', body)
 		self.assertIn("/assets/lending_assistant/", body)
-		self.assertIn("window.location.origin", body)
+		self.assertIn("window.location.hostname", body)

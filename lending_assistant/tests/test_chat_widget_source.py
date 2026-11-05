@@ -18,6 +18,13 @@ SINKS = (
 	".html(",
 	"$.parseHTML",
 	'.append("<',
+	"createContextualFragment",
+	"srcdoc",
+	'setAttribute("on',
+	"setAttribute('on",
+	".outerHTML",
+	"$(",
+	"jQuery(",
 )
 
 
@@ -50,7 +57,11 @@ class TestChatWidgetSource(unittest.TestCase):
 		self.assertEqual(tokens, tuple(prompts.SOURCE_LABELS))
 
 	def test_markup_sinks_only_inside_render_answer(self):
+		# the one allowed jQuery call is the startup hook; same length, so offsets still match
 		code = js_code()
+		hook = '$(document).on("startup", init);'
+		self.assertEqual(code.count(hook), 1)
+		code = code.replace(hook, " " * len(hook))
 		begin, end = function_span(code, "render_answer")
 		for sink in SINKS:
 			for m in re.finditer(re.escape(sink), code):
@@ -58,6 +69,10 @@ class TestChatWidgetSource(unittest.TestCase):
 		# render_answer uses Frappe's sanitiser and our pass, in that order
 		body = code[begin:end]
 		self.assertLess(body.index("frappe.markdown("), body.index("harden("))
+		# the parsed nodes are hardened before they are adopted, and only here
+		self.assertLess(body.index("harden("), body.index("replaceChildren("))
+		for m in re.finditer(r"parsed\.body", code):
+			self.assertTrue(begin < m.start() < end, f"parsed.body outside render_answer at {m.start()}")
 
 	def test_render_answer_is_the_only_caller_of_markdown(self):
 		code = js_code()

@@ -15,7 +15,9 @@ HOW IT DECIDES (DECISIONS #43: an allowlist, not a denylist)
 
   (A) the module can't be bound: the name `frappe` may only be the root of an attribute chain;
   (B) every attribute chain rooted at `frappe` must match an ALLOWLIST entry (`not-allowed` otherwise);
-  (C) imports are allowlisted too (`import` otherwise);
+  (C) imports are allowlisted too (`import` otherwise): a frappe import, a standard-library or other third-party import
+  (M4a, #45), by file, down to the imported name; network and database-driver modules are a hit everywhere
+  (`network-import`, no marker, no allowlist row); `import x as y` is a hit unless that exact alias is allowlisted;
   (D) a call to a method named like a DB read, write, commit, identity or side-effect API is a hit whatever the receiver;
   (E) dunders, `mro` and `__builtins__`; (F) `frappe.conf` / `get_site_config`; (G) writes to `frappe.flags`;
   (H) the app's own modules (M2b-R11): another app module's names are judged against APP_API (the public surface) and
@@ -86,6 +88,7 @@ ALLOWED = {
 	"js-html": (),
 	"not-allowed": (),  # (B) a frappe chain that is on no allowlist entry
 	"import": (),  # (C) an import that is on no allowlist entry
+	"network-import": (),  # (C) socket, requests, urllib, http, sqlite3, pymysql, MySQLdb, httpx...: never, in any file
 	"app-api": (),  # (H) one app module reaching another module's private or unlisted names (M2b-R11)
 	"controller-import": (),  # (I) a doctype controller class imported outside doctype/ (M2b-R12)
 }
@@ -161,7 +164,39 @@ IMPORT_ALLOWLIST = [
 	("from", "frappe.utils", "strip_html_tags", ANYWHERE),
 	("from", "frappe.model", "get_permitted_fields", (GUARD,)),
 	("from", "frappe.model.document", "Document", ("**/doctype/",)),
+	# M4a (#45): everything that is not frappe or the app, per file, down to the imported name. A file or a name that is
+	# not listed is a hit. `anthropic` has no row yet: M4b adds ("import", "anthropic", None, ("assistant/orchestrator.py",)).
+	# An alias (`import x as y`, `from x import y as z`) needs its own row: kind "import" with name "as y", or kind "from"
+	# with name "y as z". There are none today.
 ]
+# One row per file and import, so the dead-entry check (--check-allowlist) is exact for every file.
+_PLAIN_IMPORTS = {
+	"api/chat.py": ("time",),
+	"assistant/audit.py": ("json", "re"),
+	"assistant/codereader.py": ("fnmatch", "os", "time"),
+	GUARD: ("json", "re", "uuid"),
+	"assistant/tools/knowledge.py": ("json",),
+	"kb/ingest.py": ("hashlib", "json", "os", "re", "tempfile"),
+	"kb/lookup.py": ("re",),
+	"kb/retrieve.py": ("re", "unicodedata"),
+	"kb/search.py": ("math", "re"),
+	"kb/store.py": ("json", "os", "re"),
+	"kb/validate.py": ("json", "os", "re"),
+}
+_FROM_IMPORTS = {
+	GUARD: (
+		("collections", "Counter"), ("contextlib", "contextmanager"), ("datetime", "date"), ("datetime", "datetime"),
+		("datetime", "time"), ("datetime", "timedelta"), ("decimal", "Decimal"),
+	),
+}
+IMPORT_ALLOWLIST += [("import", module, None, (rel,)) for rel, modules in _PLAIN_IMPORTS.items() for module in modules]
+IMPORT_ALLOWLIST += [("from", module, name, (rel,)) for rel, pairs in _FROM_IMPORTS.items() for module, name in pairs]
+# Modules that open a network connection or talk to a database. A hit in every file: no row can allow them and no
+# marker excuses them (M4a, #45). `anthropic` is not here: it is allowed in the orchestrator only, by a row in M4b.
+NETWORK_MODULES = (
+	"socket", "requests", "urllib", "http", "sqlite3", "pymysql", "MySQLdb", "httpx",
+	"ssl", "smtplib", "ftplib", "telnetlib", "socketserver", "xmlrpc", "aiohttp", "websockets", "mysql",
+)  # fmt: skip
 
 
 # --- (H) the app's own modules ---------------------------------------------------------------------------------------
@@ -252,7 +287,11 @@ MODES = {
 
 def import_key(entry) -> str:
 	kind, module, name, files = entry
-	return f"{'import ' + module if kind == 'import' else 'from ' + module + ' import ' + name} in {', '.join(files)}"
+	if kind == "import":
+		text = "import " + module + (f" {name}" if name else "")
+	else:
+		text = f"from {module} import {name}"
+	return f"{text} in {', '.join(files)}"
 
 
 def file_ok(rel: str, files) -> bool:
@@ -513,7 +552,30 @@ class Scanner(ast.NodeVisitor):
 			self.hit(node, "generic-exec", f"import of {name}")
 		elif is_app(name):
 			self.judge_app_import(node, name)
+		else:
+			self.judge_foreign_import(node, name, item.asname)
 		self.judge_controller(node, name)
+
+	def judge_foreign_import(self, node, module: str, asname=None):
+		"""(C, M4a) `import x` / `import x as y` for a module that is not frappe and not the app."""
+		if any(under(module, p) for p in EXEC_PREFIXES):
+			self.hit(node, "generic-exec", f"import of {module}")
+		elif module.split(".")[0] in NETWORK_MODULES:
+			self.hit(node, "network-import", f"import {module}: network and database-driver modules are banned everywhere (C)")
+		elif not self.import_allowed("import", module, f"as {asname}" if asname else None):
+			alias = f" as {asname}" if asname else ""
+			self.hit(node, "alias" if asname else "import", f"import {module}{alias} is not on the import allowlist for {self.rel} (C)")
+
+	def judge_foreign_from(self, node, module: str, name: str, asname=None):
+		"""(C, M4a) `from x import y` for a module that is not frappe and not the app: judged by name, so
+		`from os import remove` is a hit even though `import os` may be allowed."""
+		full = f"{module}.{name}"
+		if any(under(full, p) for p in EXEC_PREFIXES) or full in EXEC_DOTTED or full in DYNAMIC_DOTTED:
+			self.hit(node, "generic-exec" if full not in DYNAMIC_DOTTED else "dynamic", f"import of {full}")
+		elif module.split(".")[0] in NETWORK_MODULES:
+			self.hit(node, "network-import", f"from {module} import {name}: network and database-driver modules are banned everywhere (C)")
+		elif not self.import_allowed("from", module, f"{name} as {asname}" if asname and asname != name else name):
+			self.hit(node, "alias" if asname and asname != name else "import", f"from {module} import {name} is not on the import allowlist for {self.rel} (C)")
 
 	def judge_from_import(self, node):
 		module = self.absolute_module(node)
@@ -541,8 +603,8 @@ class Scanner(ast.NodeVisitor):
 					self.hit(node, "alias", f"from {module} import {item.name} as {item.asname}: no other names for frappe things (A)")
 				if not self.import_allowed("from", module, item.name):
 					self.hit(node, "import", f"from {module} import {item.name} is not on the import allowlist (C)")
-			elif any(under(full, p) for p in EXEC_PREFIXES) or full in EXEC_DOTTED or full in DYNAMIC_DOTTED:
-				self.hit(node, "generic-exec" if full not in DYNAMIC_DOTTED else "dynamic", f"import of {full}")
+			else:
+				self.judge_foreign_from(node, module, item.name, item.asname)
 
 	def absolute_module(self, node) -> str:
 		"""The dotted module of a `from` import, with a relative import resolved against this file."""
@@ -808,7 +870,19 @@ class Scanner(ast.NodeVisitor):
 				self.hit(node, "file-access", "open()")
 			elif func.id == "type" and len(node.args) == 1 and not node.keywords:
 				self.hit(node, "dynamic", "type(x): hands out the class of any object, Document included (R12)")
+		elif isinstance(func, ast.Name):
+			self.judge_imported_file_call(node, func)
 		self.generic_visit(node)
+
+	def judge_imported_file_call(self, node, func):
+		"""M4a second layer: `from os import remove` then `remove(p)`. The import itself is already a hit unless a row
+		allows it; this catches the call if a row is ever added for a file-changing name."""
+		resolved = self.resolve(func)
+		parts = resolved.split(".")
+		if len(parts) > 1 and parts[0] in FILE_MODULES and parts[-1] in (
+			FILE_CALLS | FILE_MUTATORS | FILE_MUTATORS_AMBIGUOUS
+		):
+			self.hit(node, "file-access", f"{resolved}() called through an imported name")
 
 	def judge_method(self, node, func):
 		"""(D) a method name is judged whatever the receiver, so an alias cannot hide it."""

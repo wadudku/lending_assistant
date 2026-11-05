@@ -49,6 +49,9 @@ class OrchTestCase(ToolTestCase):
 
 	def go(self, script, question="Q?", dispatch=None, **kwargs):
 		client = cf.FakeClient(script)
+		self.addCleanup(
+			lambda: self.assertEqual(client.alternation_problems, [])
+		)  # every request, suite-wide
 		patchers = [mock.patch.object(orchestrator, "_make_client", return_value=client)]
 		if dispatch is not None:
 			patchers.append(mock.patch.object(orchestrator.registry, "dispatch", side_effect=dispatch))
@@ -129,6 +132,17 @@ class TestStopReasons(OrchTestCase):
 		self.assertEqual(self.roles_of(client.calls[1]), ["user", "assistant"])
 		self.assertEqual(result["status"], "ok")
 
+	def test_two_pause_turns_in_a_row_stay_one_assistant_message(self):
+		script = [
+			cf.response("pause_turn", cf.server_tool_use("s1", "q")),
+			cf.response("pause_turn", cf.server_tool_use("s2", "q2")),
+			cf.response("end_turn", cf.text(LABELLED)),
+		]
+		result, client = self.go(script)
+		self.assertEqual(self.roles_of(client.calls[2]), ["user", "assistant"])
+		self.assertEqual(len(client.calls[2]["messages"][1]["content"]), 2)
+		self.assertEqual(result["status"], "ok")
+
 	def test_max_tokens_runs_no_tool_and_says_the_answer_was_cut(self):
 		script = [
 			cf.response("max_tokens", cf.text("Half an ans"), cf.tool_use("t1", "get_card", {"card_id": "x"}))
@@ -196,6 +210,12 @@ class TestLimits(OrchTestCase):
 		self.assertEqual(len(client.calls), 2)
 		self.assertEqual(client.calls[1]["tool_choice"], {"type": "none"})
 		self.assertEqual(client.retries, [1, 0])
+		sent = client.calls[1]["messages"]
+		self.assertEqual(
+			[m["role"] for m in sent], ["user", "assistant", "user"]
+		)  # merged, not a second user message
+		self.assertEqual(sent[-1]["content"][0]["type"], "tool_result")
+		self.assertEqual(sent[-1]["content"][-1], {"type": "text", "text": prompts.WRAP_UP_REQUEST})
 
 	def test_timeouts_and_retries_follow_the_budget(self):
 		_, client = self.go([cf.response("end_turn", cf.text(LABELLED))])
@@ -483,9 +503,33 @@ class TestInjectionAndLabels(OrchTestCase):
 		result, client = self.go(script)
 		self.assertEqual(len(client.calls), 2)
 		self.assertEqual(client.calls[1]["tool_choice"], {"type": "none"})
-		self.assertEqual(client.calls[1]["messages"][-1]["content"], prompts.REPAIR_REQUEST)
+		sent = client.calls[1]["messages"][-1]["content"]
+		self.assertTrue(sent.startswith(prompts.REPAIR_REQUEST))
+		self.assertIn("the answer has no source label", sent)  # the repair names what was wrong
+		self.assertEqual(self.roles_of(client.calls[1]), ["user", "assistant", "user"])
 		self.assertIn({"repair": "labels"}, result["tool_calls"])
 		self.assertEqual(result["status"], "ok")
+		self.assertNotIn(prompts.LABELS_MISSING_NOTICE, result["answer"])
+
+	def test_a_malformed_label_counts_as_missing_and_goes_to_repair(self):
+		bad = "[Analysis, BRD 7.6] " + "x" * 400 + " [General knowledge, confidence: low]"
+		good = "[Analysis] BRD 7.6 " + "x" * 400 + " [General knowledge] (confidence: low)"
+		result, client = self.go(
+			[cf.response("end_turn", cf.text(bad)), cf.response("end_turn", cf.text(good))]
+		)
+		self.assertEqual(len(client.calls), 2)
+		sent = client.calls[1]["messages"][-1]["content"]
+		self.assertIn("[Analysis, BRD 7.6] is not an exact label", sent)
+		self.assertIn("[General knowledge, confidence: low] is not an exact label", sent)
+		self.assertEqual((result["answer"], result["status"]), (good, "ok"))
+
+	def test_a_label_only_in_the_sources_line_goes_to_repair(self):
+		script = [
+			cf.response("end_turn", cf.text("Plain text. " * 40 + "\n\nSources: [Analysis] [Live site]")),
+			cf.response("end_turn", cf.text("[Analysis] fixed " * 20)),
+		]
+		result, client = self.go(script)
+		self.assertEqual(len(client.calls), 2)
 		self.assertNotIn(prompts.LABELS_MISSING_NOTICE, result["answer"])
 
 	def test_still_missing_after_the_repair_adds_the_visible_notice_and_keeps_the_status(self):

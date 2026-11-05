@@ -83,6 +83,62 @@ class TestHelpers(AssistantTestCase):
 		self.assertEqual(prompts.check_labels("short", []), [])
 		self.assertEqual(prompts.check_labels("[General knowledge] x", ["web"]), ["[Web]"])
 
+	def test_find_labels_is_the_one_rule(self):
+		find = prompts.find_labels
+		self.assertEqual(
+			find("[Analysis] BRD 7.6, BR-LMS-150. [General knowledge] (confidence: low)"),
+			["[Analysis]", "[General knowledge]"],
+		)
+		self.assertEqual(
+			find("[Analysis, BRD 7.6] x"), ["[Analysis, BRD 7.6]"]
+		)  # malformed: listed as written
+		self.assertEqual(
+			find("[General knowledge, confidence: low] x"), ["[General knowledge, confidence: low]"]
+		)
+		self.assertEqual(
+			find("[Analysis] a\n\n7. Sources\n[Code] lending/x.py:1 [Web] y"), ["[Analysis]"]
+		)  # the Sources section is out
+		self.assertEqual(find("Sources: [Analysis]"), [])
+		self.assertEqual(find("[Webhook] [Codebase] [Live site2] a[0]"), [])  # not labels
+		self.assertEqual(
+			find("a source line mid-text\n[Code] x"), ["[Code]"]
+		)  # only a line that starts with Sources ends the body
+		self.assertEqual(find(None), [])
+
+	def test_check_labels_exact_malformed_sources_only_and_unused(self):
+		check = prompts.check_labels
+		self.assertEqual(check("[Analysis] BRD 7.6", ["analysis"]), [])
+		self.assertEqual(
+			check("[Analysis, BRD 7.6] ok", ["analysis"]), ["[Analysis]", "malformed [Analysis, BRD 7.6]"]
+		)
+		self.assertEqual(
+			check("text\nSources: [Analysis]", ["analysis"]), ["[Analysis]"]
+		)  # a Sources-only label fails
+		self.assertEqual(check("x" * 301 + "\nSources: [Analysis]", []), ["any label"])
+		self.assertEqual(check("[Live site] only", ["live_site"]), [])  # a label for an unused source is fine
+		self.assertEqual(check("[Analysis] a [Code] b", ["analysis"]), [])
+
+	def test_repair_request_names_what_was_wrong(self):
+		self.assertEqual(prompts.repair_request([]), prompts.REPAIR_REQUEST)
+		text = prompts.repair_request(["[Live site]", "malformed [Analysis, X]", "any label"])
+		self.assertTrue(text.startswith(prompts.REPAIR_REQUEST))
+		for part in (
+			"[Live site] is missing from the body",
+			"[Analysis, X] is not an exact label",
+			"has no source label",
+		):
+			self.assertIn(part, text)
+
+	def test_the_prompt_teaches_the_canonical_label_form(self):
+		for part in (
+			"[Analysis] BRD 7.6, BR-LMS-150",
+			"[General knowledge] (confidence: low)",
+			'Wrong: "[Analysis, BRD 7.6]"',
+			"does not replace the labels in the body",
+		):
+			self.assertIn(part, prompts.STABLE_PROMPT)
+		self.assertNotIn("[Analysis] approved knowledge cards, with", prompts.STABLE_PROMPT)
+
 	def test_tool_note_is_built_from_the_stored_calls_only(self):
 		calls = [
 			{

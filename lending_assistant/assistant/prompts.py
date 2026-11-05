@@ -56,24 +56,25 @@ WHERE TO LOOK, IN THIS ORDER
 Use only the tools you are offered. If a tool is not offered, do not describe or promise it.
 
 SOURCE LABELS (every part of every answer carries one)
-[Analysis] approved knowledge cards, with the BRD section or BR id.
+[Analysis] approved knowledge cards.
 [Team finding] saved team findings.
 [Live site] meta or records read from this site.
-[Code] source code, as file:line.
+[Code] source code.
 [General knowledge] your own knowledge, not checked against our analysis or this site.
 [Web] a cited web page.
+Write each label exactly as shown, as the whole token between square brackets, and put any detail AFTER it, outside the brackets. Right: "[Analysis] BRD 7.6, BR-LMS-150", "[Code] lending/x.py:12", "[General knowledge] (confidence: low) verify with the bank". Wrong: "[Analysis, BRD 7.6]", "[General knowledge, confidence: low]". Put the label in the body, in front of the part it covers. A Sources line at the end does not replace the labels in the body.
 Never blend sources without labels. Never present general knowledge or a web page as a verified finding. After [General knowledge] or [Web] content, give a confidence word (high, medium or low) and what to verify.
 If the analysis does not cover the question, say so first ("Our analysis does not cover this."), then reason from the live site, the code or general knowledge, each labelled.
 Never invent a BR id, a field, a menu path or a file. If you are not sure, say so and say how to check.
 
 ANSWER SHAPE (skip sections that do not apply)
 1. Short answer (two or three sentences).
-2. Business view: what the BRD asks and why the bank cares. [Analysis] with the BRD section or BR id.
+2. Business view: what the BRD asks and why the bank cares. [Analysis] then the BRD section or BR id.
 3. Frappe Lending view: screen, doctype, job, code. [Analysis] [Live site] [Code].
 4. Match or gap, and why: the reasoning, not just the verdict.
 5. What this means for us: workaround today, dev item, open question for NRB.
-6. Beyond our analysis (only if used): [General knowledge] or [Web] with a confidence word and what to verify.
-7. Sources.
+6. Beyond our analysis (only if used): [General knowledge] or [Web], then a confidence word and what to verify.
+7. Sources (a summary line only; the labels stay in the body).
 How-to answers go: menu path, field labels, what to click, the expected result.
 
 PERMISSIONS (G5)
@@ -160,18 +161,90 @@ def volatile_block(**context) -> dict:
 	return {"type": "text", "text": volatile_text(**context)}
 
 
+LABEL_WORDS = ("Analysis", "Team finding", "Live site", "Code", "General knowledge", "Web")
+
+
+def body_without_sources(text: str) -> str:
+	"""The answer without its final Sources section (from the last line that starts with "Sources", with or without a
+	heading mark, number or bold). That section lists labels; it does not carry them."""
+	lines = (text or "").rstrip().splitlines()
+	for i in range(len(lines) - 1, -1, -1):
+		head = lines[i].strip().lstrip("#*0123456789. ").lower()
+		if head.startswith("sources") and not head[7:8].isalnum():
+			return "\n".join(lines[:i])
+	return text or ""
+
+
+def split_labels(text: str) -> tuple[list[str], list[str]]:
+	"""(exact labels, malformed labels) found OUTSIDE the final Sources section. Exact = the token as shown in SOURCE_LABELS.
+	Malformed = a label word followed by anything before the closing bracket, such as "[Analysis, BRD 7.6]"."""
+	exact, bad = [], []
+	body = body_without_sources(text)
+	start = 0
+	while True:
+		open_at = body.find("[", start)
+		if open_at < 0:
+			break
+		close_at = body.find("]", open_at)
+		if close_at < 0:
+			break
+		inner = body[open_at + 1 : close_at]
+		start = open_at + 1
+		for word in LABEL_WORDS:
+			if inner == word:
+				exact.append(f"[{word}]")
+			elif (
+				inner.startswith(word) and not inner[len(word) : len(word) + 1].isalnum() and len(inner) < 120
+			):
+				bad.append(f"[{inner}]")
+			else:
+				continue
+			break
+	return exact, bad
+
+
+def find_labels(text: str) -> list[str]:
+	"""THE label rule (G11), shared by the orchestrator, the smoke runner and M5. The exact tokens found outside the final
+	Sources section, then any malformed bracket labels (listed as written). A Sources-only label is not found."""
+	exact, bad = split_labels(text)
+	return [*dict.fromkeys(exact), *dict.fromkeys(bad)]
+
+
 def check_labels(answer: str, sources_used) -> list[str]:
-	"""Labels that G11 needs and the answer lacks: the label of every source a tool returned data from, and at least one
-	label in any answer of more than 300 characters. Empty list = fine."""
+	"""What G11 finds wrong with an answer, empty = fine: the label of every source a tool returned data from that is
+	not in the body as an exact token, each malformed label ("malformed [Analysis, BRD 7.6]"), and "any label" when an
+	answer of more than 300 characters has none. A malformed label does not count as present."""
 	text = answer or ""
+	exact, bad = split_labels(text)
 	missing = [
 		LABEL_OF_SOURCE[s]
 		for s in dict.fromkeys(sources_used)
-		if s in LABEL_OF_SOURCE and LABEL_OF_SOURCE[s] not in text
+		if s in LABEL_OF_SOURCE and LABEL_OF_SOURCE[s] not in exact
 	]
-	if len(text) > 300 and not any(label in text for label in SOURCE_LABELS):
+	if len(text) > 300 and not exact:
 		missing.append("any label")
+	missing += [f"malformed {label}" for label in dict.fromkeys(bad)]
 	return list(dict.fromkeys(missing))
+
+
+def repair_request(missing) -> str:
+	"""The repair call's user message: the base request plus what was wrong, so the model can fix exactly that."""
+	wrong = [m for m in missing or [] if isinstance(m, str)]
+	if not wrong:
+		return REPAIR_REQUEST
+	return (
+		REPAIR_REQUEST
+		+ " Problems found: "
+		+ "; ".join(
+			f"{m[10:]} is not an exact label: write the token alone, then the detail after it"
+			if m.startswith("malformed ")
+			else "the answer has no source label"
+			if m == "any label"
+			else f"{m} is missing from the body"
+			for m in wrong[:8]
+		)
+		+ "."
+	)
 
 
 def _cut(text: str, limit: int, marker: str = "") -> str:

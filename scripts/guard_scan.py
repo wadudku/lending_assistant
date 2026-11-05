@@ -367,7 +367,7 @@ APP_GRANTS = [
 			"history_messages",
 			"check_labels",
 			"MESSAGES",
-			"REPAIR_REQUEST",
+			"repair_request",
 			"WRAP_UP_REQUEST",
 			"CUT_NOTICE",
 			"LABELS_MISSING_NOTICE",

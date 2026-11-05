@@ -2,6 +2,7 @@
 `FakeClient` that serves the scripted responses in order and records every request it was sent."""
 
 import copy
+from itertools import pairwise
 from types import SimpleNamespace
 
 FAKE_KEY = "sk-ast-test-FAKEKEY-0123456789"
@@ -53,11 +54,24 @@ def response(stop, *content, u=None, model="claude-sonnet-5-5", details=None):
 	return Obj(stop_reason=stop, content=list(content), usage=u or usage(), model=model, stop_details=details)
 
 
+def alternation_problem(messages) -> str | None:
+	"""None when `messages` starts with a user message and strictly alternates user/assistant, else what is wrong (G9: the
+	API takes consecutive same-role messages as a 400 in this setup, so the mocked tests must never send them)."""
+	roles = [m["role"] for m in messages]
+	if not roles or roles[0] != "user":
+		return f"does not start with a user message: {roles}"
+	for first, second in pairwise(roles):
+		if first == second:
+			return f"two consecutive {first} messages: {roles}"
+	return None
+
+
 class FakeClient:
 	def __init__(self, script):
 		self.script = list(script)
 		self.calls = []
 		self.retries = []
+		self.alternation_problems = []  # one entry per request that broke strict alternation; tests assert it is empty
 
 	def with_options(self, max_retries=None):
 		self._pending_retries = max_retries
@@ -76,6 +90,9 @@ class FakeClient:
 		snap["messages"] = list(kwargs["messages"])
 		snap["messages"] = [dict(m) for m in snap["messages"]]
 		self.calls.append(snap)
+		problem = alternation_problem(snap["messages"])
+		if problem:
+			self.alternation_problems.append(f"call {len(self.calls)}: {problem}")
 		self.retries.append(self._pending_retries)
 		item = self.script.pop(0)
 		if isinstance(item, BaseException):

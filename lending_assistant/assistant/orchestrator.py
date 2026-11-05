@@ -253,6 +253,19 @@ def _refusal(response) -> dict:
 	return {"text": prompts.MESSAGES["refused"], "status": "error"}
 
 
+def _blocks(content) -> list:
+	return [{"type": "text", "text": content}] if isinstance(content, str) else list(content)
+
+
+def _push(messages: list, role: str, content) -> None:
+	"""Append a message, or merge into the last one when it has the same role: the API wants strict user/assistant
+	alternation (G9), and a wrap-up, a repair request or a second pause_turn can otherwise land on the same role twice."""
+	if messages and messages[-1]["role"] == role:
+		messages[-1] = {"role": role, "content": _blocks(messages[-1]["content"]) + _blocks(content)}
+	else:
+		messages.append({"role": role, "content": content})
+
+
 def _wrap_up(turn, call, messages, pending=None) -> dict:
 	"""One last call that cannot use tools. `pending` = the `tool_use` blocks of the response that we did not run."""
 	content = [
@@ -265,7 +278,7 @@ def _wrap_up(turn, call, messages, pending=None) -> dict:
 		for b in pending or []
 	]
 	content.append({"type": "text", "text": prompts.WRAP_UP_REQUEST})
-	messages.append({"role": "user", "content": content})
+	_push(messages, "user", content)
 	response = call(
 		timeout=_clamp(turn.remaining(), MIN_ROUND, WRAP_TIMEOUT_MAX), retries=0, tool_choice={"type": "none"}
 	)
@@ -281,11 +294,12 @@ def _wrap_up(turn, call, messages, pending=None) -> dict:
 
 def _labels(turn, call, messages, response, answer: str) -> str:
 	"""G11: one repair call if labels are missing, then a visible notice."""
-	if not prompts.check_labels(answer, turn.label_sources()):
+	problems = prompts.check_labels(answer, turn.label_sources())
+	if not problems:
 		return answer
 	if turn.remaining() >= RESERVE:
-		messages.append({"role": "assistant", "content": _replay(response.content)})
-		messages.append({"role": "user", "content": prompts.REPAIR_REQUEST})
+		_push(messages, "assistant", _replay(response.content))
+		_push(messages, "user", prompts.repair_request(problems))
 		turn.tool_calls.append({"repair": "labels"})
 		repaired = call(
 			timeout=_clamp(turn.remaining(), MIN_ROUND, WRAP_TIMEOUT_MAX),
@@ -318,21 +332,21 @@ def _loop(turn, call, messages, max_rounds) -> dict:
 			turn.tool_rounds += 1
 			if turn.tool_rounds > max_rounds:
 				return {"text": _text(response.content) + prompts.MESSAGES["limited"], "status": "limited"}
-			messages.append({"role": "assistant", "content": _replay(response.content)})
+			_push(messages, "assistant", _replay(response.content))
 			continue
 		if stop != "tool_use":
 			_log("unknown_stop", reason=stop if isinstance(stop, str) else "none")
 			raise _Stop("error", prompts.MESSAGES["error"])
 		replay = _replay(response.content)
 		uses = [b for b in replay if trace.plain(b).get("type") == "tool_use"]
-		messages.append({"role": "assistant", "content": replay})
+		_push(messages, "assistant", replay)
 		if not uses:
 			raise _Stop("error", prompts.MESSAGES["error"])
 		if turn.tool_rounds >= max_rounds or turn.remaining() < RESERVE:
 			return _wrap_up(turn, call, messages, pending=uses)
 		results = [_run_tool(turn, block) for block in uses]
 		turn.tool_rounds += 1
-		messages.append({"role": "user", "content": results})  # all results of this turn in ONE user message
+		_push(messages, "user", results)  # all results of this turn in ONE user message
 
 
 def _api_error(exc) -> _Stop:

@@ -26,6 +26,7 @@ class AskCase(ToolTestCase):
 
 	def ask(self, script, who="senior", dispatch=None, **kwargs):
 		client = cf.FakeClient(script)
+		self.addCleanup(lambda: self.assertEqual(client.alternation_problems, []))
 		patches = [mock.patch.object(orchestrator, "_make_client", return_value=client)]
 		if dispatch:
 			patches.append(mock.patch.object(orchestrator.registry, "dispatch", side_effect=dispatch))

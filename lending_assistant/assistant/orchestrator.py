@@ -129,6 +129,7 @@ class _Turn:
 			"cards_used": self.cards_used or None,
 			"web_sources": self.web_sources or None,
 			"suggestion": self.suggestion,
+			"label_sources": self.label_sources(),
 			"usage": self.usage.as_dict(),
 		}
 

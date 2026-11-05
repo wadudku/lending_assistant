@@ -173,6 +173,17 @@ def _validate(question, route, depth, deep):
 	return question, route, depth, deep
 
 
+def _source_labels(outcome) -> list:
+	"""The label words of the answer that a source backs (M6-R2): a word counts only when its tool returned data this turn
+	(`label_sources`; an empty findings search is none). `General knowledge` has no tool, so the answer's own word counts."""
+	backed = {prompts.LABEL_OF_SOURCE[s][1:-1] for s in outcome.get("label_sources") or [] if s in prompts.LABEL_OF_SOURCE}
+	return [
+		word
+		for word in (label[1:-1] for label in prompts.find_labels(outcome["answer"]))
+		if word in LABEL_WORDS and (word in backed or word == "General knowledge")
+	]
+
+
 def _stored_suggestion(suggestion, outcome):
 	"""What `findings.save` will build the finding from (G13): the suggestion, the label words found in the answer, and the
 	cards the answer relied on (those the model read with get_card; all of the turn when it read none)."""
@@ -187,9 +198,7 @@ def _stored_suggestion(suggestion, outcome):
 		"br_ids": suggestion["br_ids"],
 		"doctypes": suggestion["doctypes"],
 		"model_sources": suggestion["sources"],
-		"labels": [
-			label[1:-1] for label in prompts.find_labels(outcome["answer"]) if label[1:-1] in LABEL_WORDS
-		],
+		"labels": _source_labels(outcome),
 		"cards": [{"id": c["id"], "version": c.get("version")} for c in (read or cards)][:30],
 		"cards_basis": basis,
 	}

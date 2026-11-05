@@ -5,6 +5,7 @@ from unittest import mock
 
 import frappe
 
+from lending_assistant.api import chat
 from lending_assistant.assistant import guard, prompts
 from lending_assistant.assistant.tools import findings as tools
 from lending_assistant.tests.base import FINDING, ToolTestCase, make_finding
@@ -21,6 +22,7 @@ GOOD = {
 class TestSuggestFinding(ToolTestCase):
 	def test_source_words_equal_the_label_words(self):
 		self.assertEqual(tools.SOURCE_WORDS, prompts.LABEL_WORDS)
+		self.assertEqual(chat.LABEL_WORDS, prompts.LABEL_WORDS)
 
 	def test_writes_nothing_and_needs_no_label(self):
 		for who in self.PERSONA_NAMES[:3]:

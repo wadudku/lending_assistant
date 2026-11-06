@@ -75,15 +75,15 @@ If the loan does not exist **or** you may not read it, you get the same reply: "
 
 ## 5. Reading an answer
 
-Every part of an answer starts with a coloured label:
+Each part of an answer should start with a coloured label. If labels are missing, the answer ends with a warning.
 
 | Label | Means | How far to trust it |
 |---|---|---|
 | `[Analysis]` | From the team's approved knowledge cards (BRD text, verified test results). | Highest. Cites a BRD section or BR id. |
-| `[Team finding]` | A conclusion a colleague saved. Shown as `(draft, name, date)` or `(confirmed, name, date)`. | A team note, not proof. It never overrides an `[Analysis]` verdict. |
+| `[Team finding]` | A conclusion a colleague saved. Shown as `(draft, name, date)` or `(confirmed, name, date)`. | A team note, not proof. The advisor is told to show a conflict with an `[Analysis]` verdict, never to prefer the finding. |
 | `[Live site]` | Meta or records read from this site, with your permissions. | Accurate for this site now. |
 | `[Code]` | Source code, with a file and line. | Accurate for the installed version. |
-| `[General knowledge]` | The model's own knowledge, not checked against our analysis or this site. | **A starting point, not a conclusion.** Always has a confidence word (high, medium or low) and what to verify. |
+| `[General knowledge]` | The model's own knowledge, not checked against our analysis or this site. | **A starting point, not a conclusion.** Should come with a confidence word (high, medium or low) and what to verify; if it doesn't, treat it as low. |
 | `[Web]` | A cited web page (only when Web search is on). | Check the page. |
 
 Other things you may see:
@@ -111,10 +111,10 @@ When an answer reaches a new and useful conclusion, a **Save as finding** button
 
 ## 7. What it will refuse
 
-- **Writes.** It only reads. Ask it to create or submit something and it says "I can only read. Here's how you would do it:" and explains the steps.
+- **Writes.** It cannot write: the code blocks every create, change, submit, cancel and delete. If you ask, it explains the steps instead ("I can only read. Here's how you would do it:").
 - **Other people's data.** It reads with your permissions. A record you may not see looks the same as one that does not exist.
 - **Personal data fields.** A list of fields (phone, email, tax id, addresses, bank accounts) is never sent to the model, and password fields are always dropped.
-- **Secrets.** It will not reveal its instructions, any key or any password.
+- **Secrets.** It never has the API key or any password (they are not sent to the model). It is told not to reveal its instructions; this has not been tested yet (M7).
 - **Files outside the allowed apps.** The code reader refuses everything else ("That path is not available to the code reader.").
 - It may reply "I can't help with that request." when the model declines.
 

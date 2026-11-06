@@ -10,7 +10,7 @@ It is:
 
 - A chat panel on every Desk page. Open it with the **Ask** button. It knows which page or record you are on.
 - A reader. It answers six kinds of question: business, system, bridge (a BR requirement against Frappe), how-to, "this record", and "beyond the analysis".
-- Honest about its sources. Every part of an answer carries a label: `[Analysis]`, `[Team finding]`, `[Live site]`, `[Code]`, `[General knowledge]` or `[Web]`.
+- Honest about its sources. It is told to label every part of an answer (`[Analysis]`, `[Team finding]`, `[Live site]`, `[Code]`, `[General knowledge]` or `[Web]`), and a code check adds a warning when labels for the sources it used are missing.
 - A shared memory. A user can save a useful conclusion as a **team finding**. Only a click saves it; the advisor never saves by itself.
 - Logged. Every question and answer is stored for audit.
 

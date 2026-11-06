@@ -644,17 +644,37 @@ frappe.provide("lending_assistant");
 	function toggle(open) {
 		const show = open === undefined ? ui.panel.hidden : open;
 		ui.panel.hidden = !show;
+		if (ui.button) {
+			ui.button.setAttribute("aria-expanded", show ? "true" : "false");
+			ui.button.classList.toggle("ast-fab-open", !!show);
+		}
 		if (show) {
 			update_chip(false);
 			ui.input.focus();
 		}
 	}
 
+	// Icons are built with createElementNS and attribute calls only (no markup strings).
+	function fab_icon(kind, className) {
+		const NS = "http://www.w3.org/2000/svg";
+		const svg = document.createElementNS(NS, "svg");
+		const attrs = { viewBox: "0 0 24 24", width: "26", height: "26", fill: "none", stroke: "#fff", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", focusable: "false", class: className };
+		for (const k of Object.keys(attrs)) svg.setAttribute(k, attrs[k]);
+		const path = document.createElementNS(NS, "path");
+		path.setAttribute("d", kind === "chat" ? "M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.7 8.7 0 0 1-3.6-.8L3 21l1.9-5.1A8.2 8.2 0 0 1 4 11.5 8.4 8.4 0 0 1 12.5 3.2 8.4 8.4 0 0 1 21 11.5z" : "M6 6l12 12M18 6L6 18");
+		svg.appendChild(path);
+		return svg;
+	}
+
 	function build() {
 		read_prefs();
-		ui.button = el("button", "ast-fab", __("Ask"));
+		ui.button = el("button", "ast-fab");
 		ui.button.type = "button";
-		ui.button.title = __("Lending Assistant");
+		ui.button.title = __("Ask the Lending Assistant");
+		ui.button.setAttribute("aria-label", __("Ask the Lending Assistant"));
+		ui.button.setAttribute("aria-expanded", "false");
+		ui.button.appendChild(fab_icon("chat", "ast-fab-chat"));
+		ui.button.appendChild(fab_icon("close", "ast-fab-x"));
 		ui.button.addEventListener("click", () => toggle());
 
 		ui.panel = el("div", "ast-panel");

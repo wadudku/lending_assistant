@@ -1,6 +1,6 @@
 # User guide: how to ask good questions
 
-This guide is for the team that uses the Lending Assistant on the dev site. You need the role **Assistant User**. If you do not see the **Ask** button, ask your admin for it.
+This guide is for the team that uses the Lending Assistant on the dev site. You need the role **Assistant User**. If you do not see the round chat button (bottom-right; tooltip 'Ask the Lending Assistant'), ask your admin for it.
 
 ## What to trust (read this first)
 
@@ -12,7 +12,7 @@ Our analysis covers **103** of the BRD's requirements (Section 7) with a verifie
 
 ## 1. Open the panel
 
-Click **Ask** (bottom of any Desk page). The panel is called **Lending Assistant**. Buttons at the top: **History**, **New conversation**, and **x** to close. Esc also closes it (unless a Frappe dialog is open). Type in the box and press Enter to send (Shift+Enter makes a new line). Questions can be up to 4,000 characters.
+Click the round chat button (bottom-right of any Desk page; tooltip 'Ask the Lending Assistant'). The panel is called **Lending Assistant**. Buttons at the top: **History**, **New conversation**, and **x** to close. Esc also closes it (unless a Frappe dialog is open). Type in the box and press Enter to send (Shift+Enter makes a new line). Questions can be up to 4,000 characters.
 
 ## 2. The context chip
 

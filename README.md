@@ -159,7 +159,7 @@ Switch **Live data** and **Code reader** on to get "this record" and code answer
 
 ### 7. Roles and first users
 
-- **Assistant User:** may use the panel. The Ask button only appears for users with this role.
+- **Assistant User:** may use the panel. The round chat button (bottom-right; tooltip 'Ask the Lending Assistant') only appears for users with this role.
 - **Assistant Reviewer:** may confirm findings. It does **not** give panel access by itself, so **give a reviewer both roles**.
 - Users also need the normal Lending roles for what they want to see. The advisor reads with the user's own permissions and says so when the user cannot do something.
 

@@ -4,13 +4,76 @@
 	right: 20px;
 	bottom: 20px;
 	z-index: 1030;
-	padding: 8px 16px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 56px;
+	height: 56px;
+	padding: 0;
 	border: none;
-	border-radius: 20px;
+	border-radius: 50%;
 	background: var(--primary, #171717);
-	color: var(--neutral, #fff);
-	box-shadow: var(--shadow-lg, 0 4px 12px rgba(0, 0, 0, 0.2));
+	color: #fff;
+	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
 	cursor: pointer;
+	transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+	animation: ast-pulse 1.5s ease-out 2;
+}
+
+.ast-fab:hover,
+.ast-fab:focus-visible {
+	transform: translateY(-2px);
+	filter: brightness(0.88);
+	box-shadow: 0 10px 22px rgba(0, 0, 0, 0.38);
+}
+
+.ast-fab:focus-visible {
+	outline: 2px solid var(--primary, #171717);
+	outline-offset: 3px;
+}
+
+.ast-fab .ast-fab-x,
+.ast-fab.ast-fab-open .ast-fab-chat {
+	display: none;
+}
+
+.ast-fab.ast-fab-open .ast-fab-x {
+	display: block;
+}
+
+/* The open panel is 400px wide on the right: sit beside it (it covers the full width on phones, where Esc or its x closes it). */
+.ast-fab.ast-fab-open {
+	right: 420px;
+	animation: none;
+}
+
+/* Frappe's own bottom-right alerts/toasts must stay readable: lift the button above them while one is showing. */
+body:has(.desk-alert) .ast-fab:not(.ast-fab-open) {
+	bottom: 96px;
+}
+
+@keyframes ast-pulse {
+	0% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 var(--primary, #171717); }
+	70% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 16px rgba(23, 23, 23, 0); }
+	100% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(23, 23, 23, 0); }
+}
+
+@media (max-width: 767px) {
+	.ast-fab {
+		width: 48px;
+		height: 48px;
+	}
+
+	.ast-fab.ast-fab-open {
+		right: 20px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ast-fab {
+		animation: none;
+		transition: none;
+	}
 }
 
 .ast-panel {

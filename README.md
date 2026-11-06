@@ -185,6 +185,44 @@ Log in as a user with Assistant User and click **Ask**. Leave Depth on Both and 
 
 You should see an answer with an `[Analysis]` badge, BR ids such as BR-LMS-190 and BR-LMS-191, thumbs up and thumbs down buttons, and no red error line. If you see "The assistant is turned off.", Enabled is off. "The advisor has no API key yet." means the key is empty. See `docs/admin_runbook.md`.
 
+For more questions to try, see "Questions to start with" below.
+
+## Questions to start with
+
+These are good first questions for the team. The answers have not been evaluated yet (M7, #173), so treat each "Expect" column as what the knowledge says, not as a promise of what the advisor will write. For more examples, see `docs/user_guide.md`.
+
+### Ten BRD questions
+
+| # | Question | Why it matters | Expect |
+|---|---|---|---|
+| 1 | Does Frappe Lending apply each repayment only once? Look at BR-LMS-162. | A payment that is posted twice or lost breaks the borrower's balance and the bank's books. | Gap (Reference Number on Loan Repayment is not unique) · [Analysis] |
+| 2 | Why is BR-LMS-162 a gap, and what would we build? | The team has to plan the custom work before go-live. | Gap; test accepted one reference twice, planned item D12 · [Analysis] |
+| 3 | In what order does a payment pay off interest, principal and charges (BR-LMS-164)? | The order decides what the borrower still owes and when a loan turns overdue. | Partly covered; split is shown, but an offset order using Interest never pays interest · [Analysis] |
+| 4 | How does Frappe handle interest for odd days, the broken period (BR-LMS-142)? | The first and last instalment often cover part of a month, and the bank must charge the right interest. | Covered · [Analysis] |
+| 5 | How does a loan get its health grade and become an NPA (BR-LMS-191)? | The grade drives provisioning, income recognition and reports to Bangladesh Bank. | Partly covered; bands on Company, only override is the Manual NPA tick, planned item D15 · [Analysis] |
+| 6 | Why can't Frappe Lending set money aside for expected losses (BR-LMS-193)? | Provisioning is a regulatory duty and affects the bank's profit. | Gap; the provision rate table exists but nothing reads it, planned item D14 · [Analysis] |
+| 7 | How is unpaid interest held in suspense (BR-LMS-194)? | Interest that is not being paid must not be counted as income. | Partly covered; moved to suspense on NPA, released only on upgrade, settlement or write-off · [Analysis] |
+| 8 | Why is there a gap on limits for how much can be restructured (BR-LMS-184)? | Bangladesh Bank limits restructuring, so the bank must stop loans being rescheduled again and again. | Gap; the monthly limit job selected no loan in the test and nothing checks a limit on approval · [Analysis] |
+| 9 | Can Frappe Lending send each bill to the CBS and keep the CBS journal number (BR-LMS-134)? | The CBS is the bank's book of record, so a bill without its journal number cannot be proved. | Gap that needs the CBS link; no code or field for it, planned item D13 · [Analysis] |
+| 10 | What does BR-LMS-250 ask for on the Credit Information Bureau extract, and what does the bank send them? | The monthly CIB return is a legal duty. | "Our analysis does not cover this." · [General knowledge] with a confidence word |
+
+### Ten technical questions
+
+Questions marked **Code reader** need the Code reader switch on; **Live data** needs the Live data switch on (see step 6).
+
+| # | Question | Why it matters | Expect |
+|---|---|---|---|
+| 1 | Which jobs run every day in Lending, and what does each one do? (Code reader) | A developer needs to know what runs overnight before changing data. | The `daily_long` list in `lending/hooks.py` (line 187): interest accrual, loan demands, security shortfall, classification, accounting · [Code] |
+| 2 | In what order is a repayment applied to interest, principal and charges, and where is that set? (Code reader) | The order is configuration, so the developer must know where to change it. | The Collection Offset Sequence fields on **Loan Product** and **Company**; `get_allocation_order` in `loan_repayment.py` (line 2525) · [Code] [Live site] |
+| 3 | How does a loan restructure work in Frappe Lending, step by step? | A restructure changes a live loan's plan, so the steps must be right. | **Loan Restructure** doctype; BR-LMS-182 partly covered, the loan is re-aged to zero days past due · [Analysis] [Live site] |
+| 4 | What accounting entries does a write-off post? (Code reader) | Finance must be able to check the write-off against the ledger. | `make_gl_entries` of **Loan Write Off** in `loan_write_off.py` (line 211) · [Code] |
+| 5 | How does the security shortfall check work, and which job runs it? (Code reader) | A shortfall can force a call for more collateral. | **Process Loan Security Shortfall** and **Loan Security Shortfall**, run by `create_process_loan_security_shortfall` in `hooks.py` (line 190) · [Code] |
+| 6 | What are the possible status values of a Loan? | Reports and filters depend on the exact status words. | Draft, Sanctioned, Partially Disbursed, Disbursed, Active, Loan Closure Requested, Closed, Written Off, Settled · [Live site] |
+| 7 | A repayment was posted with a wrong date. How do I repost it? | A back-dated fix must rebuild interest and demands from that date. | **Loan Repayment Repost** doctype · [Live site] [Analysis] (BR-LMS-169, covered; no approval step) |
+| 8 | What is due on this loan right now? (Live data; open the Loan first) | It shows what the borrower owes today, from the billed demands. | The billed **Loan Demand** rows, with a note that accrued but unbilled interest is not included · [Live site] |
+| 9 | Who can submit a Loan Repayment? (ask as a user without the role) | A developer needs to know which role to give a new team member. | A ⚠ notice that the role *Loan Manager* can; System Manager can too · [Live site] |
+| 10 | What does `allocate_amount_against_demands` do in `loan_repayment.py`? (Code reader) | This is the heart of how a payment is split, so developers read it before any change. | The function at line 1814 of `loan_repayment.py`, with its allocation order · [Code] |
+
 ## Clean up a throwaway site
 
 ```bash

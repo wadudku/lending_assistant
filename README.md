@@ -212,7 +212,7 @@ Questions marked **Code reader** need the Code reader switch on; **Live data** n
 
 | # | Question | Why it matters | Expect |
 |---|---|---|---|
-| 1 | Which jobs run every day in Lending, and what does each one do? (Code reader) | A developer needs to know what runs overnight before changing data. | The `daily_long` list in `lending/hooks.py` (line 187): interest accrual, loan demands, security shortfall, classification, accounting · [Code] |
+| 1 | Which jobs run every day in Lending, and what does each one do? (Code reader) | A developer needs to know what runs overnight before changing data. | The `daily_long` list in `lending/hooks.py` (lines 187-193): interest accrual, loan demands, security shortfall, classification (NPA), closing line-of-credit loans, accounting, and statement-of-accounts emails · [Code] |
 | 2 | In what order is a repayment applied to interest, principal and charges, and where is that set? (Code reader) | The order is configuration, so the developer must know where to change it. | The Collection Offset Sequence fields on **Loan Product** and **Company**; `get_allocation_order` in `loan_repayment.py` (line 2525) · [Code] [Live site] |
 | 3 | How does a loan restructure work in Frappe Lending, step by step? | A restructure changes a live loan's plan, so the steps must be right. | **Loan Restructure** doctype; BR-LMS-182 partly covered, the loan is re-aged to zero days past due · [Analysis] [Live site] |
 | 4 | What accounting entries does a write-off post? (Code reader) | Finance must be able to check the write-off against the ledger. | `make_gl_entries` of **Loan Write Off** in `loan_write_off.py` (line 211) · [Code] |

@@ -45,9 +45,9 @@ Use the same version line as the dev site (`bench version`):
 
 | App | Version |
 |---|---|
-| frappe | 16.34.0 (branch `version-16`) |
-| erpnext | 16.35.0 (branch `version-16`) |
-| lending | 16.5.1 (branch `version-16`) |
+| frappe | 16.34.0 (tag `v16.34.0`) |
+| erpnext | 16.35.0 (tag `v16.35.0`) |
+| lending | 16.5.1 (tag `v16.5.1`) |
 | lending_assistant | 0.0.1 (branch `main`) |
 
 The shipped knowledge was verified on Lending **16.5.1**. On another Lending version, expect drift findings (step 8).
@@ -66,13 +66,19 @@ Run every command from `frappe-bench/`. Replace `<site>` with the site name.
 
 ### 1. Get the apps
 
+**On a bench that already has these apps, skip this step.** Check with `bench version`. If `bench get-app` asks "A directory for the application '<app>' already exists. Do you want to continue and overwrite it?", answer **No**. Answering yes moves the existing app folder, and any unpushed work in it, to `archived/apps/`.
+
+On a new machine, first create a bench: `bench init --frappe-branch v16.34.0 frappe-bench && cd frappe-bench`.
+
 `bench get-app` does not fetch `required_apps` by itself, so get ERPNext and Lending first, then this app:
 
 ```bash
-bench get-app erpnext --branch version-16
-bench get-app lending --branch version-16
+bench get-app erpnext --branch v16.35.0
+bench get-app lending --branch v16.5.1
 bench get-app https://github.com/wadudku/lending_assistant.git --branch main
 ```
+
+These are tags, and git checks them out detached. Using `version-16` gets the newest 16.x. That works, but the shipped knowledge was checked on 16.5.1, so expect drift findings and "check again" on findings.
 
 The repository is public, so no key is needed. If you prefer SSH, use `git@github.com:wadudku/lending_assistant.git` instead of the https address. That needs an SSH key on your GitHub account.
 

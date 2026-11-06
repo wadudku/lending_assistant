@@ -12,7 +12,7 @@
 	padding: 0;
 	border: none;
 	border-radius: 50%;
-	background: var(--primary, #171717);
+	background: var(--blue-500, #2490ef);
 	color: #fff;
 	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
 	cursor: pointer;
@@ -23,12 +23,12 @@
 .ast-fab:hover,
 .ast-fab:focus-visible {
 	transform: translateY(-2px);
-	filter: brightness(0.88);
+	background: var(--blue-600, #1579d0);
 	box-shadow: 0 10px 22px rgba(0, 0, 0, 0.38);
 }
 
 .ast-fab:focus-visible {
-	outline: 2px solid var(--primary, #171717);
+	outline: 2px solid var(--blue-600, #1579d0);
 	outline-offset: 3px;
 }
 
@@ -53,9 +53,14 @@ body:has(.desk-alert) .ast-fab:not(.ast-fab-open) {
 }
 
 @keyframes ast-pulse {
-	0% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 var(--primary, #171717); }
-	70% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 16px rgba(23, 23, 23, 0); }
-	100% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(23, 23, 23, 0); }
+	0% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(36, 144, 239, 0.4); }
+	70% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 16px rgba(36, 144, 239, 0); }
+	100% { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(36, 144, 239, 0); }
+}
+
+/* Dark theme: a thin light ring so the edge shows on a near-black page. */
+[data-theme="dark"] .ast-fab {
+	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(255, 255, 255, 0.15);
 }
 
 @media (max-width: 767px) {

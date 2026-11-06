@@ -71,7 +71,7 @@ Long technical questions and Deep analysis cost the most. The request asks the p
 
 **Assistant Conversation:** `user`, `title` (the first 100 characters of the first question, tags removed), `first_route`, `last_activity`, `message_count`.
 
-**Assistant Message** (one per exchange, written on every path including errors): `conversation`, `user`, `status`, `depth`, `deep`, `model`, `route`, `route_doctype`, `route_docname`, `question`, `answer`, `roles` (the roles at that moment), `tokens_in`, `tokens_out`, `latency_ms`, `tool_calls`, `records_read`, `code_files_read`, `cards_used`, `web_sources`, `feedback`, `feedback_comment`, `finding_suggestion`, `finding`. All fields are read-only. `cards_used` lists every card the lookups returned (each tagged with how it was reached), not only the cards the model opened.
+**Assistant Message** (one per question that passed the role, switch, rate-limit and input checks, including failed answers; a rejected request writes no row): `conversation`, `user`, `status`, `depth`, `deep`, `model`, `route`, `route_doctype`, `route_docname`, `question`, `answer`, `roles` (the roles at that moment), `tokens_in`, `tokens_out`, `latency_ms`, `tool_calls`, `records_read`, `code_files_read`, `cards_used`, `web_sources`, `feedback`, `feedback_comment`, `finding_suggestion`, `finding`. All fields are read-only. `cards_used` lists every card the lookups returned (each tagged with how it was reached), not only the cards the model opened.
 
 Who can see what: an Assistant User sees only their own conversations and messages. A System Manager can read and delete all. Findings are shared: every Assistant User can read all findings.
 
@@ -87,7 +87,7 @@ Provenance fields (question, sources, cards used, Lending version, author, sourc
 
 ## 9. Re-ingesting knowledge after cards change
 
-This is a maintainer task; see the README ("Maintainers only"). In short: approve cards in the build repo, run `lending_assistant.kb.ingest.run` with the build repo's `knowledge` folder and its commit, commit the app, then run the knowledge check.
+This is a maintainer task; see the README ("Maintainers only"). In short: approve cards in the build repo, run `lending_assistant.kb.ingest.run` with the build repo's `knowledge` folder and its commit, then restart (`bench restart`, or stop and start `bench start`) so the workers load the new cards, commit the app, then run the knowledge check.
 
 What happens to findings: nothing is rewritten. When a finding is opened (or found by `search_findings`) the app compares the card versions it recorded with the shipped cards. A changed or removed card, or a different installed Lending version, shows the orange **check again** banner (and the advisor says "check again").
 

@@ -29,7 +29,7 @@ Under the conversation there are two controls:
 | **Depth: Business** | Plain banking words; screens as the user sees them; no code detail. | You want to understand the rule or the process. |
 | **Depth: Technical** | Doctypes, field names, jobs, file and line references; no basic banking explanations. | You are a developer tracing behaviour. |
 | **Depth: Both** (default) | Business view first, then how Frappe Lending does it, side by side. | Bridge questions, or when unsure. |
-| **Deep analysis (slower, larger model)** | Uses the larger model, up to 12 tool rounds, compares BRD text, cards and code, and states its confidence. Can take about 100 seconds and costs several times more. | A hard bridge question, or a conclusion you may want to save. Not for quick look-ups. |
+| **Deep analysis (slower, larger model)** | Uses the larger model, up to 12 tool rounds, compares BRD text, cards and code, and states its confidence. Can take up to about 100 seconds and costs several times more. | A hard bridge question, or a conclusion you may want to save. Not for quick look-ups. |
 
 Both settings are remembered in your browser.
 
@@ -91,7 +91,7 @@ Other things you may see:
 - "Our analysis does not cover this." at the start: the requirement has not been analysed.
 - A **⚠** line: a permission notice.
 - "Partial answer: a limit was reached before it was finished." and "(I reached my limit for this question before I could finish.)": the advisor ran out of rounds or time. Ask a narrower question.
-- "Source labels are missing in this reply; treat it as unverified.": the advisor could not label it properly even after one repair attempt.
+- "Source labels are missing in this reply; treat it as unverified.": the advisor could not label it properly (after one repair attempt when there was time).
 - "(This answer was cut short because it reached the length limit. Ask me to continue if you need the rest.)": ask it to continue.
 
 Use the thumbs up and thumbs down under an answer, and **Comment** to say why. This helps the admin.
@@ -100,14 +100,14 @@ Use the thumbs up and thumbs down under an answer, and **Comment** to say why. T
 
 When an answer reaches a new and useful conclusion, a **Save as finding** button appears under it. Nothing is saved until you click it.
 
-- A dialog lets you edit the Title (up to 140 characters) and Summary (up to 4,000). The question, BR ids, doctypes, sources, the cards used and the Lending version come from the answer; you cannot change them. Click **Save**. The answer then shows "Saved as AF-00001".
+- A dialog lets you edit the Title (up to 140 characters) and Summary (up to 4,000). The question, sources, cards used and Lending version come from the answer and can never be changed. The BR ids and doctypes can be corrected later in the form. Click **Save**. The answer then shows "Saved as AF-00001".
 - A new finding is **Draft**. Only a person with **Assistant Reviewer** can set it to **Confirmed**.
 - If a reviewer-confirmed finding is edited by someone who is not a reviewer, it goes back to Draft.
 - You can edit and delete your own findings. Reviewers can edit and delete all.
 - A finding shows an orange **check again** banner when a card it relied on changed or was removed, or when the Lending version changed.
 - If a finding disagrees with an `[Analysis]` bridge verdict, the advisor shows both and calls it a conflict. It does not pick the finding.
 - Open findings with the search bar: **Assistant Finding**. In the list, **Export to Markdown** downloads the selected rows (or the current filter, at most 200) as a `.md` file.
-- You can save at most 20 findings per hour.
+- You can save at most 20 findings per window (one hour by default).
 
 ## 7. What it will refuse
 
@@ -137,4 +137,4 @@ When an answer reaches a new and useful conclusion, a **Save as finding** button
 - Use Business depth to learn a rule, Technical depth to find code.
 - Check every `[General knowledge]` part.
 - Save a finding only if you would defend it in front of the senior.
-- Costs: each normal question costs a few cents (estimate, from the live checks; about USD 0.003 to 0.05), a Deep analysis question about USD 0.2 (estimate; M4b smoke run 5 and M5 live check). There is no measured cost per user yet.
+- Costs (estimates from the small live checks, not a measured cost per user): a normal question cost from under one cent to about six cents (M4b smoke run 5: USD 0.003-0.028; M5 live check: about 0.05, an upper bound; M6 live check: USD 0.19 for 3 asks, about 0.06 each). A Deep analysis question cost about USD 0.18-0.21 (M4b smoke run 5, M5). Long questions with many tool rounds cost more.

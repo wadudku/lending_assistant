@@ -126,7 +126,7 @@ What the install created for you:
 
 ### 5. Finish ERPNext's Setup Wizard
 
-A new ERPNext site opens the Setup Wizard on first login. Complete it: language, country, currency and time zone; your name, email and password; a company name and abbreviation; a chart of accounts; the financial year dates. A test company is enough. It is not confirmed whether the Ask button works before the wizard is finished (Desk starts the panel on its normal start-up event whether or not the wizard is done), so finish the wizard first.
+Desk sends every page to the wizard until it is finished, so the advisor can't be used before then. Complete it: language, country, currency and time zone; your name, email and password; a company name and abbreviation; a chart of accounts; the financial year dates. A test company is enough.
 
 ### 6. Settings
 
@@ -173,7 +173,7 @@ The knowledge cards and their index ship inside the app (`lending_assistant/kb/k
 bench --site <site> execute lending_assistant.kb.validate.run
 ```
 
-A clean result ends with `validate: 0 finding(s), 5 note(s), 941 cards checked`. The 5 notes are menu paths outside the Lending sidebar, which are not checked. The card count changes when the knowledge changes. What matters is `0 finding(s)`.
+A clean result prints `validate: 0 finding(s), 5 note(s), 941 cards checked`, then the same result as JSON (`"findings": []`). The 5 notes are menu paths outside the Lending sidebar, which are not checked. The card count changes when the knowledge changes. What matters is `0 finding(s)`.
 
 A `FINDING` line means a card names a doctype, field label, Select option, Lending menu path or code file that this site does not have. This usually happens on a different Lending version. The check reads only the cards' front matter, not their text. Nothing is written.
 
@@ -201,6 +201,7 @@ bench drop-site <site>
 ```bash
 bench --site <site> backup --with-files
 git -C apps/lending_assistant pull
+bench setup requirements --python   # only if pyproject.toml dependencies changed
 bench --site <site> migrate
 bench build --app lending_assistant
 ```
@@ -238,6 +239,7 @@ A fresh install never needs this.
   ```
 
   It copies only approved cards, writes only `lending_assistant/kb/knowledge/` and `lending_assistant/public/kb_img/`, and stops without writing anything if the source is not fit. A second identical run reports new 0, changed 0, removed 0.
+- Then restart (`bench restart`, or stop and start `bench start`) so the workers load the new cards.
 - Then commit the app and run `kb.validate.run`.
 - A changed or removed card makes team findings that used it show "check again".
 
@@ -250,12 +252,11 @@ bench --site <site> set-config allow_tests true
 bench --site <site> run-tests --app lending_assistant
 ```
 
-The widget source tests and the guardrail scan do not need a site:
+The widget source tests and the guardrail scan do not need a site (run them from `frappe-bench/`):
 
 ```bash
-cd apps/lending_assistant
-../../env/bin/python -m unittest lending_assistant.tests.test_chat_widget_source
-../../env/bin/python scripts/guard_scan.py --check-allowlist
+env/bin/python -m unittest lending_assistant.tests.test_chat_widget_source
+env/bin/python apps/lending_assistant/scripts/guard_scan.py --check-allowlist
 ```
 
 The scan fails on any use of a banned API (writes, `ignore_permissions`, raw SQL and so on) that is not marked `# AST-ALLOWED`.

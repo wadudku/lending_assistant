@@ -647,6 +647,9 @@ frappe.provide("lending_assistant");
 		if (ui.button) {
 			ui.button.setAttribute("aria-expanded", show ? "true" : "false");
 			ui.button.classList.toggle("ast-fab-open", !!show);
+			// Swap the icons with the hidden attribute so only one is ever laid out, whatever stylesheet is loaded.
+			if (ui.chat_svg) ui.chat_svg.toggleAttribute("hidden", !!show);
+			if (ui.close_svg) ui.close_svg.toggleAttribute("hidden", !show);
 		}
 		if (show) {
 			update_chip(false);
@@ -673,8 +676,10 @@ frappe.provide("lending_assistant");
 		ui.button.title = __("Ask the Lending Assistant");
 		ui.button.setAttribute("aria-label", __("Ask the Lending Assistant"));
 		ui.button.setAttribute("aria-expanded", "false");
-		ui.button.appendChild(fab_icon("chat", "ast-fab-chat"));
-		ui.button.appendChild(fab_icon("close", "ast-fab-x"));
+		ui.chat_svg = fab_icon("chat", "ast-fab-chat");
+		ui.close_svg = fab_icon("close", "ast-fab-x");
+		ui.close_svg.setAttribute("hidden", "");
+		ui.button.append(ui.chat_svg, ui.close_svg);
 		ui.button.addEventListener("click", () => toggle());
 
 		ui.panel = el("div", "ast-panel");
